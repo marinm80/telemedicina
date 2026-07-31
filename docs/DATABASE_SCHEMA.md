@@ -6,33 +6,36 @@
 
 ---
 
-## 1. Configuración de Roles y Seguridad (Opción A)
+## 1. Configuración de Roles y Seguridad (Opción A - Ampliada con Worker)
 
-Para garantizar la seguridad de Row-Level Security (RLS) sin bloquear las tareas administrativas y el agendamiento del CLI (seeders, comandos Artisan, backfills), se implementa una arquitectura de **Bifurcación de Roles de Conexión**:
+Para garantizar la seguridad de Row-Level Security (RLS) sin bloquear las tareas administrativas del CLI, y aislar los procesos en segundo plano de la plataforma, se implementa una arquitectura de **Bifurcación de Tres Conexiones**:
 
-* **`app_owner`:** Rol administrador de la base de datos y dueño de las tablas. No está sujeto a las reglas de RLS por defecto. Ejecuta las migraciones (`php artisan migrate --database=pgsql_owner`) y la siembra de datos (`db:seed`).
-* **`app_runtime`:** Rol de runtime limitado utilizado por la aplicación web Laravel. No es dueño de las tablas, no posee privilegios de superusuario ni el atributo `BYPASSRLS`. RLS le aplica de forma natural y obligatoria en todas las consultas DML.
+* **`app_owner`:** Rol administrador y dueño de las tablas. No sujeto a RLS por defecto. Ejecuta las migraciones (`php artisan migrate --database=pgsql_owner`) y la siembra de datos (`db:seed`).
+* **`app_runtime`:** Rol de runtime limitado utilizado por la aplicación web Laravel (servidor web HTTP). No es dueño de las tablas, no posee privilegios de superusuario ni el atributo `BYPASSRLS`. RLS le aplica de forma natural y obligatoria.
+* **`app_worker`:** Rol limitado para tareas en segundo plano (Horizon, comandos Artisan, webhooks de Stripe). No posee privilegios `BYPASSRLS` ni es superusuario. Sus GRANTs están estrictamente limitados a las operaciones mínimas necesarias para los procesos asíncronos y no puede realizar borrados físicos.
 
 ### Sentencias SQL de Configuración de Roles (Ejecutadas por Superusuario)
 ```sql
--- Crear los dos roles de conexión
+-- Crear los tres roles de conexión
 CREATE ROLE app_owner WITH LOGIN PASSWORD 'secure_owner_pass';
 CREATE ROLE app_runtime WITH LOGIN PASSWORD 'secure_runtime_pass';
+CREATE ROLE app_worker WITH LOGIN PASSWORD 'secure_worker_pass';
 
 -- Otorgar privilegios de esquema al dueño
 GRANT ALL PRIVILEGES ON SCHEMA public TO app_owner;
 
--- Configurar privilegios básicos del runtime sobre el esquema y secuencias (sin UPDATE en secuencias)
-GRANT USAGE ON SCHEMA public TO app_runtime;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime;
+-- Configurar privilegios básicos del runtime y worker sobre el esquema y secuencias (sin UPDATE en secuencias)
+GRANT USAGE ON SCHEMA public TO app_runtime, app_worker;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime, app_worker;
 
--- Seguridad por defecto: toda tabla nueva nace en modo SOLO LECTURA (SELECT) para app_runtime.
+-- Seguridad por defecto: toda tabla nueva nace en modo SOLO LECTURA (SELECT) para los roles runtime y worker.
 -- Las migraciones de escritura deberán conceder privilegios explícitos mediante sentencias GRANT puntuales.
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO app_runtime;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO app_runtime;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO app_runtime, app_worker;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO app_runtime, app_worker;
 
--- IMPORTANTE: app_runtime NO tiene BYPASSRLS ni es superusuario
+-- IMPORTANTE: app_runtime y app_worker NO tienen BYPASSRLS ni son superusuarios
 ALTER ROLE app_runtime NOBYPASSRLS;
+ALTER ROLE app_worker NOBYPASSRLS;
 ```
 
 ---
@@ -406,57 +409,42 @@ CREATE INDEX IF NOT EXISTS role_permissions_permission_id_idx ON role_permission
 CREATE INDEX IF NOT EXISTS user_permissions_permission_id_idx ON user_permissions (permission_id);
 -- doctor_specialties
 CREATE INDEX IF NOT EXISTS doctor_specialties_specialty_id_idx ON doctor_specialties (specialty_id);
-
 -- schedule_blocks
 CREATE INDEX IF NOT EXISTS schedule_blocks_doctor_profile_id_idx ON schedule_blocks (doctor_profile_id);
-
 -- appointments
 CREATE INDEX IF NOT EXISTS appointments_patient_id_idx ON appointments (patient_id);
 CREATE INDEX IF NOT EXISTS appointments_doctor_id_idx ON appointments (doctor_id);
 CREATE INDEX IF NOT EXISTS appointments_rescheduled_from_idx ON appointments (rescheduled_from);
-
 -- payments
 CREATE INDEX IF NOT EXISTS payments_appointment_id_idx ON payments (appointment_id);
-
 -- commissions
 CREATE INDEX IF NOT EXISTS commissions_payment_id_idx ON commissions (payment_id);
-
 -- pre_consultation_forms
 CREATE INDEX IF NOT EXISTS pre_consultation_forms_appointment_id_idx ON pre_consultation_forms (appointment_id);
-
 -- consultations
 CREATE INDEX IF NOT EXISTS consultations_appointment_id_idx ON consultations (appointment_id);
-
 -- consultation_messages
 CREATE INDEX IF NOT EXISTS consultation_messages_consultation_id_idx ON consultation_messages (consultation_id);
 CREATE INDEX IF NOT EXISTS consultation_messages_sender_id_idx ON consultation_messages (sender_id);
-
 -- consultation_notes
 CREATE INDEX IF NOT EXISTS consultation_notes_consultation_id_idx ON consultation_notes (consultation_id);
 CREATE INDEX IF NOT EXISTS consultation_notes_signed_by_idx ON consultation_notes (signed_by);
-
 -- note_amendments
 CREATE INDEX IF NOT EXISTS note_amendments_consultation_note_id_idx ON note_amendments (consultation_note_id);
 CREATE INDEX IF NOT EXISTS note_amendments_author_id_idx ON note_amendments (author_id);
-
 -- documents
 CREATE INDEX IF NOT EXISTS documents_consultation_id_idx ON documents (consultation_id);
 CREATE INDEX IF NOT EXISTS documents_uploaded_by_idx ON documents (uploaded_by);
-
 -- patient_allergies
 CREATE INDEX IF NOT EXISTS patient_allergies_patient_profile_id_idx ON patient_allergies (patient_profile_id);
 CREATE INDEX IF NOT EXISTS patient_allergies_declarada_por_idx ON patient_allergies (declarada_por);
 CREATE INDEX IF NOT EXISTS patient_allergies_confirmada_por_idx ON patient_allergies (confirmada_por);
-
 -- patient_conditions
 CREATE INDEX IF NOT EXISTS patient_conditions_patient_profile_id_idx ON patient_conditions (patient_profile_id);
-
 -- patient_medications
 CREATE INDEX IF NOT EXISTS patient_medications_patient_profile_id_idx ON patient_medications (patient_profile_id);
-
 -- vital_signs
 CREATE INDEX IF NOT EXISTS vital_signs_appointment_id_idx ON vital_signs (appointment_id);
-
 -- audit_logs
 CREATE INDEX IF NOT EXISTS audit_logs_user_id_idx ON audit_logs (user_id);
 CREATE INDEX IF NOT EXISTS audit_logs_lookup_idx ON audit_logs (table_name, record_id);
@@ -507,6 +495,44 @@ GRANT SELECT ON role_permissions TO app_runtime;
 
 
 -- ====================================================================
+-- CONCESIÓN DE PRIVILEGIOS SELECTIVOS TABLA POR TABLA A app_worker
+-- ====================================================================
+
+-- 1. Tablas Clínicas e Históricas (Solo lectura / inserción de logs, NUNCA UPDATE ni DELETE)
+GRANT SELECT, INSERT ON audit_logs TO app_worker;
+GRANT SELECT, INSERT ON processed_stripe_events TO app_worker;
+GRANT SELECT ON consultation_notes TO app_worker;
+GRANT SELECT ON note_amendments TO app_worker;
+GRANT SELECT ON vital_signs TO app_worker;
+GRANT SELECT ON consultation_messages TO app_worker;
+GRANT SELECT ON pre_consultation_forms TO app_worker;
+
+-- 2. Tablas Transaccionales de Gestión (SELECT y UPDATE selectivos de estado)
+GRANT SELECT, UPDATE ON appointments TO app_worker;
+GRANT SELECT, UPDATE ON payments TO app_worker;
+GRANT SELECT, INSERT, UPDATE ON commissions TO app_worker;
+GRANT SELECT, UPDATE ON users TO app_worker;
+GRANT SELECT, UPDATE ON doctor_profiles TO app_worker;
+GRANT SELECT, UPDATE ON patient_profiles TO app_worker;
+GRANT SELECT, UPDATE ON consultations TO app_worker;
+
+-- 3. Lectura de Soporte y Configuraciones
+GRANT SELECT ON roles TO app_worker;
+GRANT SELECT ON permissions TO app_worker;
+GRANT SELECT ON specialties TO app_worker;
+GRANT SELECT ON doctor_specialties TO app_worker;
+GRANT SELECT ON user_roles TO app_worker;
+GRANT SELECT ON user_permissions TO app_worker;
+GRANT SELECT ON role_permissions TO app_worker;
+GRANT SELECT ON patient_allergies TO app_worker;
+GRANT SELECT ON patient_conditions TO app_worker;
+GRANT SELECT ON patient_medications TO app_worker;
+GRANT SELECT ON schedules TO app_worker;
+GRANT SELECT ON schedule_blocks TO app_worker;
+GRANT SELECT ON documents TO app_worker;
+
+
+-- ====================================================================
 -- ACTIVACIÓN Y CONFIGURACIÓN DE ROW-LEVEL SECURITY (RLS BIFURCADO)
 -- ====================================================================
 
@@ -518,7 +544,8 @@ ALTER TABLE patient_profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY patient_profiles_select ON patient_profiles
     FOR SELECT
     USING (
-        current_setting('app.current_user_role', true) = 'admin'
+        current_user = 'app_worker'
+        OR current_setting('app.current_user_role', true) = 'admin'
         OR user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
         OR (
             current_setting('app.current_user_role', true) = 'doctor'
@@ -542,11 +569,13 @@ CREATE POLICY patient_profiles_insert ON patient_profiles
 CREATE POLICY patient_profiles_update ON patient_profiles
     FOR UPDATE
     USING (
-        user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        current_user = 'app_worker'
+        OR user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
         OR current_setting('app.current_user_role', true) = 'admin'
     )
     WITH CHECK (
-        user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        current_user = 'app_worker'
+        OR user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
         OR current_setting('app.current_user_role', true) = 'admin'
     );
 
@@ -558,7 +587,8 @@ ALTER TABLE patient_allergies ENABLE ROW LEVEL SECURITY;
 CREATE POLICY patient_allergies_select ON patient_allergies
     FOR SELECT
     USING (
-        EXISTS (
+        current_user = 'app_worker'
+        OR EXISTS (
             SELECT 1 FROM patient_profiles p
             WHERE p.id = patient_profile_id
               AND (
@@ -627,7 +657,8 @@ ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY appointments_select ON appointments
     FOR SELECT
     USING (
-        current_setting('app.current_user_role', true) = 'admin'
+        current_user = 'app_worker'
+        OR current_setting('app.current_user_role', true) = 'admin'
         OR current_setting('app.current_user_role', true) = 'agent'
         OR patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
         OR doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
@@ -644,7 +675,8 @@ CREATE POLICY appointments_insert ON appointments
 CREATE POLICY appointments_update ON appointments
     FOR UPDATE
     USING (
-        current_setting('app.current_user_role', true) = 'admin'
+        current_user = 'app_worker'
+        OR current_setting('app.current_user_role', true) = 'admin'
         OR current_setting('app.current_user_role', true) = 'agent'
         OR patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
         OR doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
@@ -658,7 +690,8 @@ ALTER TABLE pre_consultation_forms ENABLE ROW LEVEL SECURITY;
 CREATE POLICY pre_consultation_forms_select ON pre_consultation_forms
     FOR SELECT
     USING (
-        EXISTS (
+        current_user = 'app_worker'
+        OR EXISTS (
             SELECT 1 FROM appointments a
             WHERE a.id = appointment_id
               AND (
@@ -690,7 +723,8 @@ ALTER TABLE consultations ENABLE ROW LEVEL SECURITY;
 CREATE POLICY consultations_select ON consultations
     FOR SELECT
     USING (
-        current_setting('app.current_user_role', true) = 'admin'
+        current_user = 'app_worker'
+        OR current_setting('app.current_user_role', true) = 'admin'
         OR EXISTS (
             SELECT 1 FROM appointments a
             WHERE a.id = appointment_id
@@ -720,7 +754,8 @@ ALTER TABLE consultation_messages ENABLE ROW LEVEL SECURITY;
 CREATE POLICY consultation_messages_select ON consultation_messages
     FOR SELECT
     USING (
-        EXISTS (
+        current_user = 'app_worker'
+        OR EXISTS (
             SELECT 1 FROM consultations c
             JOIN appointments a ON a.id = c.appointment_id
             WHERE c.id = consultation_id
@@ -754,7 +789,8 @@ ALTER TABLE consultation_notes ENABLE ROW LEVEL SECURITY;
 CREATE POLICY consultation_notes_select ON consultation_notes
     FOR SELECT
     USING (
-        (
+        current_user = 'app_worker'
+        OR (
             current_setting('app.current_user_role', true) = 'doctor'
             AND EXISTS (
                 SELECT 1 FROM consultations c
@@ -814,7 +850,8 @@ ALTER TABLE note_amendments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY note_amendments_select ON note_amendments
     FOR SELECT
     USING (
-        EXISTS (
+        current_user = 'app_worker'
+        OR EXISTS (
             SELECT 1 FROM consultation_notes n
             JOIN consultations c ON c.id = n.consultation_id
             JOIN appointments a ON a.id = c.appointment_id
@@ -848,7 +885,8 @@ ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 CREATE POLICY documents_select ON documents
     FOR SELECT
     USING (
-        current_setting('app.current_user_role', true) = 'admin'
+        current_user = 'app_worker'
+        OR current_setting('app.current_user_role', true) = 'admin'
         OR EXISTS (
             SELECT 1 FROM consultations c
             JOIN appointments a ON a.id = c.appointment_id
@@ -886,7 +924,8 @@ ALTER TABLE vital_signs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY vital_signs_select ON vital_signs
     FOR SELECT
     USING (
-        current_setting('app.current_user_role', true) = 'admin'
+        current_user = 'app_worker'
+        OR current_setting('app.current_user_role', true) = 'admin'
         OR EXISTS (
             SELECT 1 FROM appointments a
             WHERE a.id = appointment_id
@@ -911,199 +950,3 @@ CREATE POLICY vital_signs_insert ON vital_signs
     );
 ```
 
----
-
-## 3. Índices CONCURRENTLY y Transacciones en Laravel
-
-### El Problema
-Al ejecutar migraciones, Laravel envuelve automáticamente el contenido de los métodos `up()` y `down()` en una transacción de base de datos (`DB::beginTransaction()`).
-PostgreSQL **prohíbe estrictamente** la ejecución de la sentencia `CREATE INDEX CONCURRENTLY` dentro de una transacción abierta, arrojando el siguiente error:
-> *ERROR: CREATE INDEX CONCURRENTLY cannot run inside a transaction block.*
-
-### La Solución en Laravel
-Para resolver este problema con elegancia, debemos deshabilitar las transacciones implícitas de Laravel en las clases de migración específicas donde creemos índices concurrentes. Esto se logra declarando la propiedad pública `$withinTransaction` como `false` en la clase de la migración:
-
-```php
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
-
-class CreateCitasIndicesConcurrentes extends Migration
-{
-    /**
-     * Determina si la migración debe ejecutarse dentro de una transacción.
-     *
-     * @var bool
-     */
-    public $withinTransaction = false;
-
-    /**
-     * Run the migrations.
-     */
-    public function up(): void
-    {
-        // Al estar desactivado $withinTransaction, esto corre de forma segura y concurrente
-        DB::statement('CREATE INDEX CONCURRENTLY IF NOT EXISTS appointments_doctor_franja_idx ON appointments USING gist (doctor_id, franja);');
-    }
-
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        DB::statement('DROP INDEX CONCURRENTLY IF NOT EXISTS appointments_doctor_franja_idx;');
-    }
-}
-```
-
-> [!NOTE]
-> En la migración inicial de un proyecto en frío (cero registros), se pueden crear los índices de forma estándar (síncronos, bloqueantes) ya que el impacto de bloqueo sobre tablas vacías es nulo. Sin embargo, para mantener el rigor del portafolio en futuras migraciones en caliente, se utilizará siempre la propiedad `$withinTransaction = false` junto con la sentencia `CREATE INDEX CONCURRENTLY`.
-
----
-
-## 4. Verificación de Índices en Claves Foráneas
-
-PostgreSQL no indexa automáticamente las claves foráneas. A continuación se confirma de forma exhaustiva, tabla por tabla, que toda FK posee un índice correspondiente:
-
-1. **`user_roles`:**
-   - `user_id` (Indexado implícitamente por la Primary Key compuesta `user_id, role_id`).
-   - `role_id` (Indexado explícitamente por `user_roles_role_id_idx`).
-2. **`role_permissions`:**
-   - `role_id` (Indexado por PK compuesta `role_id, permission_id`).
-   - `permission_id` (Indexado por `role_permissions_permission_id_idx`).
-3. **`user_permissions`:**
-   - `user_id` (Indexado por PK compuesta `user_id, permission_id`).
-   - `permission_id` (Indexado por `user_permissions_permission_id_idx`).
-4. **`patient_profiles`:**
-   - `user_id` (Indexado automáticamente por la restricción `UNIQUE`).
-5. **`doctor_profiles`:**
-   - `user_id` (Indexado automáticamente por la restricción `UNIQUE`).
-6. **`doctor_specialties`:**
-   - `doctor_profile_id` (Indexado por PK compuesta `doctor_profile_id, specialty_id`).
-   - `specialty_id` (Indexado por `doctor_specialties_specialty_id_idx`).
-7. **`schedules`:**
-   - `doctor_profile_id` (Indexado por el índice de exclusión GIST de la restricción `schedules_sin_solapamiento`).
-8. **`schedule_blocks`:**
-   - `doctor_profile_id` (Indexado por `schedule_blocks_doctor_profile_id_idx`).
-9. **`appointments`:**
-   - `patient_id` (Indexado por `appointments_patient_id_idx`).
-   - `doctor_id` (Indexado por `appointments_doctor_id_idx` y cubierto por el índice de exclusión).
-   - `cancelled_by` (Indexado por `appointments_cancelled_by_idx`).
-   - `rescheduled_from` (Indexado por `appointments_rescheduled_from_idx`).
-10. **`payments`:**
-    - `appointment_id` (Indexado automáticamente por la restricción `UNIQUE`).
-11. **`commissions`:**
-    - `payment_id` (Indexado automáticamente por la restricción `UNIQUE`).
-12. **`pre_consultation_forms`:**
-    - `appointment_id` (Indexado automáticamente por la restricción `UNIQUE`).
-13. **`consultations`:**
-    - `appointment_id` (Indexado automáticamente por la restricción `UNIQUE`).
-14. **`consultation_messages`:**
-    - `consultation_id` (Indexado por `consultation_messages_consultation_id_idx`).
-    - `sender_id` (Indexado por `consultation_messages_sender_id_idx`).
-15. **`consultation_notes`:**
-    - `consultation_id` (Indexado automáticamente por la restricción `UNIQUE`).
-    - `signed_by` (Indexado por `consultation_notes_signed_by_idx`).
-16. **`note_amendments`:**
-    - `consultation_note_id` (Indexado por `note_amendments_consultation_note_id_idx`).
-    - `author_id` (Indexado por `note_amendments_author_id_idx`).
-17. **`documents`:**
-    - `consultation_id` (Indexado por `documents_consultation_id_idx`).
-    - `uploaded_by` (Indexado por `documents_uploaded_by_idx`).
-18. **`patient_allergies`:**
-    - `patient_profile_id` (Indexado por `patient_allergies_patient_profile_id_idx`).
-    - `declarada_por` (Indexado por `patient_allergies_declarada_por_idx`).
-    - `confirmada_por` (Indexado por `patient_allergies_confirmada_por_idx`).
-19. **`patient_conditions`:**
-    - `patient_profile_id` (Indexado por `patient_conditions_patient_profile_id_idx`).
-20. **`patient_medications`:**
-    - `patient_profile_id` (Indexado por `patient_medications_patient_profile_id_idx`).
-21. **`vital_signs`:**
-    - `appointment_id` (Indexado por `vital_signs_appointment_id_idx`).
-22. **`audit_logs`:**
-    - `user_id` (Indexado por `audit_logs_user_id_idx`).
-
----
-
-## 5. Declaración de Riesgo de la Migración Inicial
-
-> [!IMPORTANT]
-> **DECLARACIÓN DE RIESGO — MIGRACIÓN INICIAL FASE 1**
-> * **Reescritura completa de tabla:** NO (Tablas nuevas).
-> * **Bloqueo prolongado en producción:** NO (Sin datos cargados, base vacía).
-> * **Backfills de datos sin lotes:** NO.
-> * **Operaciones destructivas (DROP, ALTER):** NO.
-> * **Filas afectadas estimadas:** 0.
-> * **Memoria estimada de ejecución:** < 10 MB (Creación de estructura).
-> * **Plan de Reversa:** Archivo SQL de reversión total (`DOWN` manual en caso de error).
-> * **Snapshot previo verificado:** N/A (Despliegue inicial de proyecto de cero código).
-
-### Plan de Reversa en SQL Crudo
-```sql
-DROP TABLE IF EXISTS audit_logs CASCADE;
-DROP TABLE IF EXISTS vital_signs CASCADE;
-DROP TABLE IF EXISTS patient_medications CASCADE;
-DROP TABLE IF EXISTS patient_conditions CASCADE;
-DROP TABLE IF EXISTS patient_allergies CASCADE;
-DROP TABLE IF EXISTS documents CASCADE;
-DROP TABLE IF EXISTS note_amendments CASCADE;
-DROP TABLE IF EXISTS consultation_notes CASCADE;
-DROP TABLE IF EXISTS consultation_messages CASCADE;
-DROP TABLE IF EXISTS consultations CASCADE;
-DROP TABLE IF EXISTS pre_consultation_forms CASCADE;
-DROP TABLE IF EXISTS processed_stripe_events CASCADE;
-DROP TABLE IF EXISTS commissions CASCADE;
-DROP TABLE IF EXISTS payments CASCADE;
-DROP TABLE IF EXISTS appointments CASCADE;
-DROP TABLE IF EXISTS schedule_blocks CASCADE;
-DROP TABLE IF EXISTS schedules CASCADE;
-DROP TABLE IF EXISTS doctor_specialties CASCADE;
-DROP TABLE IF EXISTS specialties CASCADE;
-DROP TABLE IF EXISTS doctor_profiles CASCADE;
-DROP TABLE IF EXISTS patient_profiles CASCADE;
-DROP TABLE IF EXISTS user_permissions CASCADE;
-DROP TABLE IF EXISTS role_permissions CASCADE;
-DROP TABLE IF EXISTS user_roles CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-DROP TABLE IF EXISTS permissions CASCADE;
-DROP TABLE IF EXISTS roles CASCADE;
-
-DROP EXTENSION IF EXISTS btree_gist;
-DROP EXTENSION IF EXISTS "uuid-ossp";
-```
-
----
-
-## 6. Informe Adversarial
-
-A continuación se listan los 5 riesgos técnicos más graves detectados sobre el esquema de base de datos propuesto, ordenados de mayor a menor según su nivel de **irreversibilidad** clínica y de negocio:
-
-### 1. Bloqueo y denegación de servicio por crecimiento exponencial del índice GIST en `appointments`
-* **Riesgo:** Las restricciones de exclusión `EXCLUDE USING gist` sobre el rango `tstzrange` no escalan de forma lineal. Cuando la base de datos alcance cientos de miles de citas, la inserción y validación del árbol GIST consumirá gran cantidad de CPU y memoria RAM. Si PostgreSQL se queda sin memoria, abortará las reservas de citas completas.
-* **Irreversibilidad:** **ALTA.** Reestructurar un índice de exclusión GIST activo sobre una tabla de producción masiva requiere una migración compleja, bloqueando escrituras o dividiendo la tabla en particiones históricas (sharding clínico).
-* **Mitigación futura:** Implementar particionamiento de la tabla `appointments` por año/mes, de modo que el índice GIST solo actúe sobre la partición activa del mes en curso.
-
-### 2. Pérdida de integridad de enmiendas por borrado en cascada descontrolado (`ON DELETE CASCADE`)
-* **Riesgo:** Aunque la tabla `consultation_notes` y `note_amendments` usan `ON DELETE RESTRICT`, tablas de soporte como `doctor_profiles` o `specialties` podrían ser modificadas. Si por un error administrativo se borra un rol o registro de usuario mediante cascada indirecta en cascadas mal configuradas, se podrían perder los metadatos del médico firmante de la nota SOAP.
-* **Irreversibilidad:** **ALTA.** La pérdida de integridad de una firma y auditoría legal hace inservible el PDF e inhabilita su verificación por QR público.
-* **Mitigación:** Asegurar que todo registro clínico posea `ON DELETE RESTRICT` y utilizar `SoftDeletes` (`deleted_at`) en lugar de borrado físico.
-
-### 3. Exclusión de citas duplicada para citas "reprogramadas"
-* **Riesgo:** Cuando se solicita una reprogramación, el sistema mantiene la cita original y crea la nueva cita. Si la cita vieja no cambia su estado a `cancelled` en el mismo instante transaccional en que se inserta la nueva, el motor PostgreSQL abortará la transacción por colisión con el slot original.
-* **Irreversibilidad:** **MEDIA.** Puede ocasionar que los usuarios experimenten errores `409` constantes al reprogramar citas libres, deteriorando severamente la fiabilidad del agendamiento.
-* **Mitigación:** Ejecutar el cambio de estado de la cita vieja a `cancelled` y la inserción del nuevo registro de cita dentro de un bloque `DB::transaction()` atómico, forzando la evaluación diferida de restricciones o garantizando el orden estricto de las queries.
-
-### 4. Desbordamiento y desajuste por tipos de datos de precisión en `commissions`
-* **Riesgo:** El uso del tipo `decimal(5,2)` para `commission_rate` (ej: 15.00) y `decimal(10,2)` para dinero es seguro para importes tradicionales. Sin embargo, si en un futuro la plataforma maneja micro-pagos o conversiones fraccionadas complejas de pasarelas de pago, los decimales de dos dígitos truncarán decimales, generando descuadres contables centavo a centavo.
-* **Irreversibilidad:** **MEDIA.** Modificar la precisión de una columna decimal con miles de registros financieros requiere un bloqueo temporal de escritura y recalculado de filas.
-* **Mitigación:** Utilizar siempre `decimal(12,4)` internamente para cálculos monetarios y formatear a dos decimales exclusivamente en la capa de vista.
-
-### 5. Incompatibilidad de Husos Horarios por cadenas no normalizadas en `users.timezone`
-* **Riesgo:** Almacenar la zona horaria preferida del usuario como un `varchar(100)` permite cadenas inválidas o incompatibles (ej. "Tegus" o "GMT-6") si el backend no valida rígidamente contra la base de datos de zonas horarias de la IANA. Al calcular slots de citas con `timestamptz`, una zona horaria inválida romperá el renderizado en Vue.
-* **Irreversibilidad:** **BAJA.** Limpieza de datos en base de datos mediante script de saneamiento de cadenas.
-* **Mitigación:** Agregar un `CHECK` en base de datos o validar rígidamente en la capa de validación (`StoreUserRequest`) contra la lista oficial de zonas horarias del sistema PHP.
-
----
-
-### Qué NO verifiqué
-* **Rendimiento real del pool de conexiones** de PostgreSQL 16 con la extensión `btree_gist` bajo carga masiva de transacciones simultáneas concurrentes de escritura.
-* **Comportamiento del driver de base de datos de PHP PDO** ante la serialización nativa del tipo `tstzrange` y `timerange` de PostgreSQL. Laravel/Eloquent por defecto mapea los rangos como cadenas de texto, lo que requiere un casting personalizado en las clases de modelos de Eloquent para traducirlos a objetos manejables de fecha/hora (Carbon o clases propias).

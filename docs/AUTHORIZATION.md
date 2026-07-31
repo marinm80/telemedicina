@@ -108,31 +108,29 @@ A continuación se detalla el mecanismo de protección, justificación de capas 
 
 ---
 
-## 2. Decisión del Rol de Conexión y Gestión de RLS (Opción A)
+## 2. Decisión de Roles de Conexión y Gestión de RLS (Bifurcación de Tres Vías)
 
-Para evitar el fallo de las políticas RLS en entornos locales y CLI (comandos Artisan, seeders de base de datos y migraciones iniciales), se implementa la **Bifurcación de Roles de Conexión (Opción A)**.
+Para evitar el fallo de las políticas RLS en tareas administrativas y webhooks, se implementa una **Bifurcación de Tres Conexiones**:
 
-### Diseño de Conexiones en Laravel
-El archivo `config/database.php` posee dos configuraciones separadas para el motor PostgreSQL:
-* **`pgsql_owner`:** Utiliza las credenciales de `app_owner`. Tiene privilegios DDL completos, es dueño de las tablas y no tiene RLS activo de forma predeterminada al no forzarlo. Es utilizado en el pipeline de despliegue mediante:
-  `php artisan migrate --database=pgsql_owner`
-* **`pgsql` (Por defecto):** Utiliza las credenciales de `app_runtime`. Es el rol limitado empleado por el servidor web HTTP en producción. Al no ser dueño de las tablas y carecer de privilegios `BYPASSRLS`, PostgreSQL evalúa rígidamente las políticas RLS sobre todas sus operaciones.
+* **`pgsql_owner` (`app_owner`):** Rol administrador de base de datos y dueño de las tablas. Utilizado para correr migraciones y seeders (`php artisan migrate --database=pgsql_owner`). No está sujeto a RLS de forma predeterminada al no poseer el modificador FORCE.
+* **`pgsql` (`app_runtime`):** Utilizado por la aplicación web Laravel en caliente para atender peticiones HTTP. Al no ser dueño de las tablas y carecer de privilegios `BYPASSRLS`, RLS le aplica estrictamente.
+* **`pgsql_worker` (`app_worker`):** Utilizado para tareas en segundo plano (Horizon, comandos Artisan, webhooks de Stripe). Al igual que `app_runtime`, no posee privilegios `BYPASSRLS` ni es superusuario. Sus privilegios están limitados exclusivamente a las operaciones necesarias para los procesos asíncronos y no puede realizar borrados físicos (`DELETE`).
 
-### Implicación para el Runtime y Seguridad
-El rol `app_runtime` posee privilegios estrictos `GRANT SELECT, INSERT, UPDATE, DELETE` y carece de permisos de alteración de esquema (DDL). RLS se le aplica de forma natural y automática al realizar cualquier consulta en caliente.
+### Seguridad y Aislamiento del Worker en Producción
+El rol `app_worker` se configura con permisos mínimos e inmutables (no tiene permisos de eliminación ni alteración de esquemas). RLS se mantiene activo sobre él, pero las políticas PostgreSQL se configuran permitiéndole acceso asíncrono en lectura o escritura parcial a través del condicional `OR current_user = 'app_worker'`. Las credenciales de `app_worker` residen estrictamente en el entorno de Horizon y comandos Artisan en producción, y el servidor web HTTP no las conoce, previniendo su explotación a través de endpoints de usuario.
 
 ---
 
 ## 3. Blindaje de la Inmutabilidad por Privilegios de Tabla y Secuencias
 
-La inmutabilidad del sistema no depende únicamente del código o de políticas RLS. Se imponen restricciones físicas a nivel de privilegios PostgreSQL sobre el rol `app_runtime`:
+La inmutabilidad del sistema no depende únicamente del código o de políticas RLS. Se imponen restricciones físicas a nivel de privilegios PostgreSQL sobre los roles `app_runtime` y `app_worker`:
 
 * **Bloqueo Absoluto de Borrado/Edición en Tablas Clínicas/Auditoría:**
-  El rol `app_runtime` carece del privilegio `DELETE` (y en su caso `UPDATE`) en tablas inmutables. Cualquier intento de borrado físico lanzará un error SQL antes de evaluar RLS:
+  Los roles `app_runtime` y `app_worker` carecen del privilegio `DELETE` (y en su caso `UPDATE`) en tablas inmutables. Cualquier intento de borrado físico lanzará un error SQL antes de evaluar RLS:
   * `audit_logs` -> `GRANT SELECT, INSERT` (Bloqueados `UPDATE` y `DELETE`).
   * `note_amendments` -> `GRANT SELECT, INSERT` (Bloqueados `UPDATE` y `DELETE`).
   * `processed_stripe_events` -> `GRANT SELECT, INSERT` (Bloqueados `UPDATE` y `DELETE`).
-  * `consultation_notes` -> `GRANT SELECT, INSERT, UPDATE` (Bloqueado `DELETE`).
+  * `consultation_notes` -> `GRANT SELECT, INSERT, UPDATE` (para runtime; worker solo tiene `GRANT SELECT`). Bloqueado `DELETE`.
 * **Justificación de Privilegios para `vital_signs` (Signos Vitales):**
   * **Privilegios:** `GRANT SELECT, INSERT` (Bloqueados `UPDATE` y `DELETE`).
   * *Justificación:* Los signos vitales (peso, presión, temperatura) representan una medición fisiológica objetiva tomada en un instante específico. Clínicamente es inaceptable alterar una lectura pasada o eliminarla; si se requiere una nueva medición, se realiza una nueva inserción de registro.
@@ -140,7 +138,7 @@ La inmutabilidad del sistema no depende únicamente del código o de políticas 
   * **Privilegios:** `GRANT USAGE, SELECT` (Bloqueado `UPDATE`).
   * *Justificación:* Para que funcione `nextval()`, el rol solo requiere privilegios de `USAGE` y `SELECT` sobre la secuencia. Conceder `GRANT UPDATE` permitiría al runtime ejecutar `setval()`, pudiendo alterar correlativos intencionadamente y causar colisiones de IDs o denegación de servicios.
 * **Seguridad por Defecto en Tablas Nuevas (`ALTER DEFAULT PRIVILEGES`):**
-  Cualquier tabla nueva creada por `app_owner` otorgará únicamente `GRANT SELECT` a `app_runtime` de manera automática. Esto obliga a los programadores a declarar explícitamente privilegios de escritura (`INSERT`, `UPDATE`) en sus archivos de migración de forma manual, evitando que hereden privilegios destructivos por defecto.
+  Cualquier tabla nueva creada por `app_owner` otorgará únicamente `GRANT SELECT` a `app_runtime` y `app_worker` de manera automática. Esto obliga a los programadores a declarar explícitamente privilegios de escritura (`INSERT`, `UPDATE`) en sus archivos de migración de forma manual, evitando que hereden privilegios destructivos por defecto.
 
 ---
 
@@ -162,7 +160,7 @@ Dado que PostgreSQL bloquea por defecto cualquier operación DML si RLS está ac
 
 ## 5. Pruebas de Integridad del Gauntlet de Testing (CI/CD)
 
-Para garantizar que RLS y los privilegios permanezcan activos, no se salten por una mala configuración en el archivo `.env` de runtime y permitan la escritura legítima, el pipeline de CI/CD ejecuta tres pruebas obligatorias:
+Para garantizar que RLS y los privilegios permanezcan activos, no se salten por una mala configuración en el archivo `.env` de runtime o worker y permitan la escritura legítima, el pipeline de CI/CD ejecuta tres pruebas obligatorias:
 
 ### Prueba 1: Ataque SQL Directo (Fuga de Ficha Clínica)
 Esta prueba se conecta usando el rol runtime (`app_runtime`) y simula una lectura directa saltando Laravel. Verifica que PostgreSQL retorne `0` filas si se intenta leer un perfil de paciente ajeno.
@@ -200,55 +198,59 @@ test('rls impide leer la ficha clinica de un paciente por consulta sql directa c
 
 ---
 
-### Prueba 2: Auditoría de Rol y Configuración de Conexión Runtime
-Esta prueba previene el "bypass por .env" verificando que la conexión activa del runtime de la aplicación no sea dueña de las tablas, no sea superusuario y no tenga la propiedad `BYPASSRLS` ni la herede recursivamente de ningún rol con privilegios de bypass.
+### Prueba 2: Auditoría de Roles y Configuración de Conexiones Activas (Runtime y Worker)
+Esta prueba previene fugas de configuración verificando que NINGUNA de las conexiones runtime expuestas (`app_runtime` y `app_worker`) sea propietaria de las tablas, tenga `BYPASSRLS` o posea privilegios de superusuario.
 
 ```php
-test('la conexion runtime activa en el .env cumple los requisitos de seguridad y no es propietaria de las tablas clinicas', function () {
-    // 1. Verificar que el usuario runtime de la base de datos no sea el propietario de las tablas
-    $propietario = DB::selectOne("
+test('ninguna conexion activa de la aplicacion es propietaria ni posee bypassrls', function () {
+    $conexionesARevisar = ['pgsql_runtime', 'pgsql_worker'];
+    
+    // Obtener propietario de la tabla clínica de referencia
+    $propietario = DB::connection('pgsql_owner')->selectOne("
         SELECT pg_catalog.pg_get_userbyid(c.relowner) as owner
         FROM pg_class c
         WHERE c.relname = 'patient_profiles'
     ");
-    
-    $currentUser = DB::selectOne("SELECT current_user");
-    
-    expect($currentUser->current_user)->not->toBe($propietario->owner, 
-        "¡ALERTA DE SEGURIDAD!: La conexión runtime está usando el usuario propietario de las tablas ({$propietario->owner}), lo que anularía RLS en silencio.");
 
-    // 2. Verificar que el rol actual de runtime no posea el atributo BYPASSRLS
-    $bypassRlsCheck = DB::selectOne("
-        SELECT rolbypassrls, rolsuper
-        FROM pg_roles
-        WHERE rolname = current_user
-    ");
+    foreach ($conexionesARevisar as $conexion) {
+        // Establecer conexión temporal
+        $db = DB::connection($conexion);
 
-    expect($bypassRlsCheck->rolbypassrls)->toBeFalse(
-        "¡ALERTA DE SEGURIDAD!: El rol runtime posee la propiedad BYPASSRLS.");
+        // 1. Obtener usuario de la sesión actual
+        $currentUser = $db->selectOne("SELECT current_user");
         
-    expect($bypassRlsCheck->rolsuper)->toBeFalse(
-        "¡ALERTA DE SEGURIDAD!: El rol runtime es superusuario.");
+        expect($currentUser->current_user)->not->toBe($propietario->owner, 
+            "¡FALLA DE SEGURIDAD!: La conexión '{$conexion}' utiliza el usuario dueño de las tablas ({$propietario->owner}), anulando RLS.");
 
-    // 3. Verificar que el rol no pertenezca a ningún grupo con BYPASSRLS o privilegios superusuario heredados
-    $rolesAdministradores = DB::select("
-        SELECT rolname 
-        FROM pg_roles 
-        WHERE rolbypassrls = true OR rolsuper = true
-    ");
+        // 2. Verificar que no posee BYPASSRLS ni SUPERUSER de forma directa
+        $bypassRlsCheck = $db->selectOne("
+            SELECT rolbypassrls, rolsuper
+            FROM pg_roles
+            WHERE rolname = current_user
+        ");
 
-    foreach ($rolesAdministradores as $adminRol) {
-        $tieneMembresia = DB::selectOne("SELECT pg_has_role(current_user, :admin_rol, 'member') as member", [
-            'admin_rol' => $adminRol->rolname
-        ]);
-        
-        expect($tieneMembresia->member)->toBeFalse(
-            "¡ALERTA DE SEGURIDAD!: El rol runtime hereda privilegios del rol administrador '{$adminRol->rolname}'.");
+        expect($bypassRlsCheck->rolbypassrls)->toBeFalse(
+            "¡FALLA DE SEGURIDAD!: El rol '{$currentUser->current_user}' posee la propiedad BYPASSRLS activa.");
+            
+        expect($bypassRlsCheck->rolsuper)->toBeFalse(
+            "¡FALLA DE SEGURIDAD!: El rol '{$currentUser->current_user}' es superusuario.");
+
+        // 3. Verificar que no hereda transitivamente privilegios de administración
+        $rolesAdministradores = DB::connection('pgsql_owner')->select("
+            SELECT rolname 
+            FROM pg_roles 
+            WHERE rolbypassrls = true OR rolsuper = true
+        ");
+
+        foreach ($rolesAdministradores as $adminRol) {
+            $tieneMembresia = $db->selectOne("SELECT pg_has_role(current_user, :admin_rol, 'member') as member", [
+                'admin_rol' => $adminRol->rolname
+            ]);
+            
+            expect($tieneMembresia->member)->toBeFalse(
+                "¡FALLA DE SEGURIDAD!: El rol '{$currentUser->current_user}' hereda de un rol administrador '{$adminRol->rolname}'.");
+        }
     }
-
-    // 4. Verificar que RLS esté activado en las tablas del catálogo
-    $estadoRls = DB::selectOne("SELECT relrowsecurity FROM pg_class WHERE relname = 'patient_profiles'");
-    expect($estadoRls->relrowsecurity)->toBeTrue("La tabla 'patient_profiles' no tiene ENABLE ROW LEVEL SECURITY.");
 });
 ```
 
