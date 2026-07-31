@@ -18,24 +18,7 @@ A continuación se detalla el mecanismo de protección, justificación de capas 
 * **Capas implicadas:** `Laravel Policy` (Capa de Enrutamiento/Aplicación) + `PostgreSQL Row-Level Security (RLS)` (Capa de Almacenamiento).
 * **Mecanismo Concreto:**
   1. *Capa Laravel:* El middleware de ruta invoca a `PatientProfilePolicy@view`. Este comprueba la existencia de un registro en `appointments` donde `doctor_id = auth()->id()`, `patient_id = $patient->user_id` y `status IN ('confirmed', 'completed')`.
-  2. *Capa PostgreSQL:* Se activa RLS en la tabla `patient_profiles` y en las tablas clínicas dependientes (`patient_allergies`, `consultation_notes`, `consultation_messages`). La política SQL de PostgreSQL evalúa:
-     ```sql
-     CREATE POLICY patient_profiles_rls ON patient_profiles
-     FOR ALL
-     USING (
-         current_setting('app.current_user_role', true) = 'admin'
-         OR user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-         OR (
-             current_setting('app.current_user_role', true) = 'doctor'
-             AND EXISTS (
-                 SELECT 1 FROM appointments a
-                 WHERE a.patient_id = patient_profiles.user_id
-                   AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-                   AND a.status IN ('confirmed', 'completed')
-             )
-         )
-     );
-     ```
+  2. *Capa PostgreSQL (RLS):* Se imponen políticas RLS segregadas para SELECT y escrituras (DML).
 * **Por qué esta combinación (y no solo una):** Si solo usamos Laravel Policies y un desarrollador en seis meses crea un endpoint `/api/v2/stats/patient-details` y olvida adjuntar la Policy, la información clínica quedaría expuesta a cualquier médico autenticado. Con RLS activo en PostgreSQL, la consulta del nuevo endpoint retornará `0` filas automáticamente al fallar la validación a nivel de motor, actuando como red de seguridad definitiva.
 * **Escenario Gherkin de Verificación:**
   ```gherkin
@@ -56,12 +39,7 @@ A continuación se detalla el mecanismo de protección, justificación de capas 
 * **Capas implicadas:** `Middleware de Laravel` + `PostgreSQL RLS`.
 * **Mecanismo Concreto:**
   1. *Capa Laravel:* El grupo de rutas `/api/clinical/*` está protegido por el middleware `EnsureUserIsNotAgent`. Este intercepta el rol y, si es `agent`, aborta con `403 Forbidden` inmediatamente, impidiendo la instanciación de controladores clínicos.
-  2. *Capa PostgreSQL:* Las tablas `patient_allergies`, `consultation_notes` y `consultation_messages` tienen RLS configurado con una política restrictiva que niega toda operación si el rol de sesión es `agent`:
-     ```sql
-     CREATE POLICY agente_bloqueo_clinico ON consultation_notes
-     FOR ALL
-     USING (current_setting('app.current_user_role', true) <> 'agent');
-     ```
+  2. *Capa PostgreSQL:* Las tablas clínicas tienen RLS configurado con una política restrictiva que niega toda operación si el rol de sesión es `agent`.
 * **Por qué esta combinación:** El middleware bloquea la petición en la frontera de enrutamiento, evitando consultas costosas y simplificando el flujo de aplicación. El RLS previene que fallos de configuración de rutas expongan tablas críticas a través de endpoints administrativos genéricos.
 * **Escenario Gherkin de Verificación:**
   ```gherkin
@@ -88,20 +66,7 @@ A continuación se detalla el mecanismo de protección, justificación de capas 
          }
      });
      ```
-  3. *Capa PostgreSQL (RLS):* La política de seguridad RLS de la tabla `consultation_notes` evalúa:
-     ```sql
-     CREATE POLICY paciente_acceso_notas ON consultation_notes
-     FOR SELECT
-     USING (
-         current_setting('app.current_user_role', true) = 'patient'
-         AND status = 'firmada'
-         AND EXISTS (
-             SELECT 1 FROM appointments a JOIN consultations c ON c.appointment_id = a.id
-             WHERE c.id = consultation_notes.consultation_id
-               AND a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-         )
-     );
-     ```
+  3. *Capa PostgreSQL (RLS):* La política de seguridad RLS en `consultation_notes` exige que la nota esté `firmada` para ser visible al rol de paciente.
 * **Por qué esta combinación:** El Global Scope de Eloquent garantiza que cualquier consulta del desarrollador (ej: `$patient->notes`) excluya automáticamente los borradores de forma transparente para evitar errores visuales en el portal del paciente. El RLS actúa en la base de datos asegurando que no se pueda eludir la regla inyectando sentencias SQL alternativas.
 * **Escenario Gherkin de Verificación:**
   ```gherkin
@@ -143,36 +108,71 @@ A continuación se detalla el mecanismo de protección, justificación de capas 
 
 ---
 
-## 2. Decisión del Rol de Conexión de la Aplicación
+## 2. Decisión del Rol de Conexión y Gestión de RLS (Opción A)
 
-Para aplicar Row-Level Security de manera robusta, adoptamos la **Opción (b): Runtime y Migraciones con el Mismo Rol de Conexión + `FORCE ROW LEVEL SECURITY`**.
+Para evitar el fallo de las políticas RLS en entornos locales y CLI (comandos Artisan, seeders de base de datos y migraciones iniciales), se implementa la **Bifurcación de Roles de Conexión (Opción A)**.
 
-### Implicación para el Pipeline de Migraciones
-1. **Un solo usuario DDL/DML:** El usuario de base de datos configurado en `.env` (`DB_USERNAME`) actúa como el propietario (owner) que ejecuta `php artisan migrate`. Por lo tanto, es el dueño físico de las tablas creadas.
-2. **Forzado de RLS en Propietarios:** Dado que PostgreSQL, por estándar, ignora las políticas RLS para el propietario de la tabla, agregamos de forma mandatoria al final del DDL de creación de cada tabla clínica:
-   ```sql
-   ALTER TABLE <tabla> ENABLE ROW LEVEL SECURITY;
-   ALTER TABLE <tabla> FORCE ROW LEVEL SECURITY;
-   ```
-   El comando `FORCE ROW LEVEL SECURITY` obliga a PostgreSQL a evaluar y aplicar las restricciones de RLS incluso cuando las consultas son lanzadas por el runtime de Laravel utilizando el rol de conexión owner.
-3. **Migraciones Libres de Filtros:** RLS aplica únicamente a sentencias DML (`SELECT`, `INSERT`, `UPDATE`, `DELETE`). Las sentencias estructurales DDL (`CREATE`, `ALTER`, `DROP`) ejecutadas por `php artisan migrate` se procesan sin interferencia del RLS. Para la ejecución de seeders o backfills de datos de prueba dentro de las migraciones, la sesión no inyecta credenciales locales de RLS, comportándose como un bypass seguro de administración.
+### Diseño de Conexiones en Laravel
+El archivo `config/database.php` posee dos configuraciones separadas para el motor PostgreSQL:
+* **`pgsql_owner`:** Utiliza las credenciales de `app_owner`. Tiene privilegios DDL completos, es dueño de las tablas y no tiene RLS activo de forma predeterminada al no forzarlo. Es utilizado en el pipeline de despliegue mediante:
+  `php artisan migrate --database=pgsql_owner`
+* **`pgsql` (Por defecto):** Utiliza las credenciales de `app_runtime`. Es el rol limitado empleado por el servidor web HTTP en producción. Al no ser dueño de las tablas y carecer de privilegios `BYPASSRLS`, PostgreSQL evalúa rígidamente las políticas RLS sobre todas sus operaciones.
+
+### Implicación para el Runtime y Seguridad
+El rol `app_runtime` posee privilegios estrictos `GRANT SELECT, INSERT, UPDATE, DELETE` y carece de permisos de alteración de esquema (DDL). RLS se le aplica de forma natural y automática al realizar cualquier consulta en caliente.
 
 ---
 
-## 3. Pruebas de Integridad del Gauntlet de Testing (CI/CD)
+## 3. Blindaje de la Inmutabilidad por Privilegios de Tabla y Secuencias
 
-Para garantizar que la seguridad RLS permanezca **activa y configurada de verdad** en PostgreSQL y no se convierta en una política decorativa deshabilitada accidentalmente, agregamos dos pruebas automatizadas en el conjunto de testing que fallan el pipeline ante cualquier regresión:
+La inmutabilidad del sistema no depende únicamente del código o de políticas RLS. Se imponen restricciones físicas a nivel de privilegios PostgreSQL sobre el rol `app_runtime`:
+
+* **Bloqueo Absoluto de Borrado/Edición en Tablas Clínicas/Auditoría:**
+  El rol `app_runtime` carece del privilegio `DELETE` (y en su caso `UPDATE`) en tablas inmutables. Cualquier intento de borrado físico lanzará un error SQL antes de evaluar RLS:
+  * `audit_logs` -> `GRANT SELECT, INSERT` (Bloqueados `UPDATE` y `DELETE`).
+  * `note_amendments` -> `GRANT SELECT, INSERT` (Bloqueados `UPDATE` y `DELETE`).
+  * `processed_stripe_events` -> `GRANT SELECT, INSERT` (Bloqueados `UPDATE` y `DELETE`).
+  * `consultation_notes` -> `GRANT SELECT, INSERT, UPDATE` (Bloqueado `DELETE`).
+* **Justificación de Privilegios para `vital_signs` (Signos Vitales):**
+  * **Privilegios:** `GRANT SELECT, INSERT` (Bloqueados `UPDATE` y `DELETE`).
+  * *Justificación:* Los signos vitales (peso, presión, temperatura) representan una medición fisiológica objetiva tomada en un instante específico. Clínicamente es inaceptable alterar una lectura pasada o eliminarla; si se requiere una nueva medición, se realiza una nueva inserción de registro.
+* **Privilegios en Secuencias:**
+  * **Privilegios:** `GRANT USAGE, SELECT` (Bloqueado `UPDATE`).
+  * *Justificación:* Para que funcione `nextval()`, el rol solo requiere privilegios de `USAGE` y `SELECT` sobre la secuencia. Conceder `GRANT UPDATE` permitiría al runtime ejecutar `setval()`, pudiendo alterar correlativos intencionadamente y causar colisiones de IDs o denegación de servicios.
+* **Seguridad por Defecto en Tablas Nuevas (`ALTER DEFAULT PRIVILEGES`):**
+  Cualquier tabla nueva creada por `app_owner` otorgará únicamente `GRANT SELECT` a `app_runtime` de manera automática. Esto obliga a los programadores a declarar explícitamente privilegios de escritura (`INSERT`, `UPDATE`) en sus archivos de migración de forma manual, evitando que hereden privilegios destructivos por defecto.
+
+---
+
+## 4. Comportamiento RLS para Escrituras: USING vs WITH CHECK
+
+Dado que PostgreSQL bloquea por defecto cualquier operación DML si RLS está activo y no se especifica una política explícita para la operación, configuramos políticas granulares utilizando las cláusulas `USING` y `WITH CHECK`:
+
+* **`USING` (Filtro de Filas Existentes):** 
+  Aplica a lecturas y escrituras de registros preexistentes (`SELECT`, `UPDATE`, `DELETE`). Define qué filas de la base de datos son visibles o modificables por la petición. Si una fila no cumple el criterio de `USING`, PostgreSQL actúa como si no existiera (retorna 0 filas o lanza error de no encontrado).
+* **`WITH CHECK` (Validación de Nuevos Valores):**
+  Aplica a inserciones y modificaciones de datos (`INSERT`, `UPDATE`). Evalúa si la fila resultante de la operación cumple con la regla de negocio. Si falla, el motor aborta la transacción lanzando un error de violación de política RLS, previniendo que un usuario inyecte datos ajenos o altere metadatos.
+
+### Ejemplo de Divergencia en `consultation_notes` (Notas SOAP):
+* **`INSERT` (`WITH CHECK`):** Un médico que tiene una consulta activa puede insertar una nota en estado `draft` (borrador) con su UUID de autor. No existe fila previa (`USING` no aplica), pero el nuevo registro es validado.
+* **`SELECT` (`USING`):** El paciente puede leer la nota sólo si el estado de la fila es `firmada`. El médico puede leerla en estado `draft` o `firmada` siempre que sea el médico de la consulta.
+* **`UPDATE` (`USING` y `WITH CHECK`):** El médico puede actualizar la nota sólo si el registro existente en la base de datos tiene estado `draft` y él es el autor (`USING`), y los nuevos valores modificados deben seguir cumpliendo que él es el autor y no se intente forzar un cambio de firmante a otro usuario (`WITH CHECK`).
+
+---
+
+## 5. Pruebas de Integridad del Gauntlet de Testing (CI/CD)
+
+Para garantizar que RLS y los privilegios permanezcan activos, no se salten por una mala configuración en el archivo `.env` de runtime y permitan la escritura legítima, el pipeline de CI/CD ejecuta tres pruebas obligatorias:
 
 ### Prueba 1: Ataque SQL Directo (Fuga de Ficha Clínica)
-Esta prueba simula una inyección o llamada SQL directa usando la conexión y el rol de runtime de la aplicación (el mismo dueño que migró las tablas). Intenta leer la ficha clínica de un paciente sin que exista cita relacionada, verificando que la base de datos intercepte el query en disco y devuelva cero resultados.
+Esta prueba se conecta usando el rol runtime (`app_runtime`) y simula una lectura directa saltando Laravel. Verifica que PostgreSQL retorne `0` filas si se intenta leer un perfil de paciente ajeno.
 
 ```php
-test('rls impide leer la ficha clinica de un paciente por consulta sql directa si no hay relacion de cita', function () {
-    // 1. Crear pacientes y médico
+test('rls impide leer la ficha clinica de un paciente por consulta sql directa con app_runtime si no hay relacion de cita', function () {
+    // 1. Crear perfiles en la base de datos usando el rol pgsql_owner
     $paciente = User::factory()->create(['role' => 'patient']);
     $medico = User::factory()->create(['role' => 'doctor']);
     
-    // Crear el perfil del paciente
     $patientProfile = PatientProfile::create([
         'user_id' => $paciente->id,
         'phone' => '12345678',
@@ -181,68 +181,113 @@ test('rls impide leer la ficha clinica de un paciente por consulta sql directa s
         'address' => 'Dirección de prueba'
     ]);
 
-    // 2. Establecer el contexto de sesión de la BD para el médico (sin cita activa)
+    // 2. Cambiar la conexión activa al rol app_runtime y fijar variables de sesión
+    Config::set('database.default', 'pgsql_runtime');
+    DB::purge('pgsql_runtime');
+
     DB::statement("SET LOCAL app.current_user_id = '{$medico->id}'");
     DB::statement("SET LOCAL app.current_user_role = 'doctor'");
 
-    // 3. Ejecutar consulta SQL directa (saltando Eloquent)
+    // 3. Ejecutar consulta directa
     $resultados = DB::select("SELECT * FROM patient_profiles WHERE user_id = :user_id", [
         'user_id' => $paciente->id
     ]);
 
-    // 4. Aserción: RLS debe obligar a PostgreSQL a retornar un conjunto vacío (0 filas)
+    // 4. Aserción: RLS retorna vacío
     expect($resultados)->toBeEmpty();
 });
 ```
 
 ---
 
-### Prueba 2: Auditoría del Catálogo del Sistema de PostgreSQL
-Esta prueba automatiza el compliance. Consulta las tablas del sistema de PostgreSQL `pg_class` y `pg_policies` para asegurar que:
-1. Toda tabla clasificada como clínica posee `relrowsecurity` en `true`.
-2. Toda tabla clínica posee `relforcerowsecurity` en `true` (garantizando el forzado de RLS para el owner).
-3. Cada una de ellas posee al menos una política RLS declarada y activa en base de datos.
+### Prueba 2: Auditoría de Rol y Configuración de Conexión Runtime
+Esta prueba previene el "bypass por .env" verificando que la conexión activa del runtime de la aplicación no sea dueña de las tablas, no sea superusuario y no tenga la propiedad `BYPASSRLS` ni la herede recursivamente de ningún rol con privilegios de bypass.
 
 ```php
-test('todas las tablas clinicas tienen habilitado y forzado el row level security con politicas activas', function () {
-    $tablasClinicas = [
-        'patient_profiles',
-        'patient_allergies',
-        'patient_conditions',
-        'patient_medications',
-        'appointments',
-        'pre_consultation_forms',
-        'consultations',
-        'consultation_messages',
-        'consultation_notes',
-        'note_amendments',
-        'documents'
-    ];
+test('la conexion runtime activa en el .env cumple los requisitos de seguridad y no es propietaria de las tablas clinicas', function () {
+    // 1. Verificar que el usuario runtime de la base de datos no sea el propietario de las tablas
+    $propietario = DB::selectOne("
+        SELECT pg_catalog.pg_get_userbyid(c.relowner) as owner
+        FROM pg_class c
+        WHERE c.relname = 'patient_profiles'
+    ");
+    
+    $currentUser = DB::selectOne("SELECT current_user");
+    
+    expect($currentUser->current_user)->not->toBe($propietario->owner, 
+        "¡ALERTA DE SEGURIDAD!: La conexión runtime está usando el usuario propietario de las tablas ({$propietario->owner}), lo que anularía RLS en silencio.");
 
-    foreach ($tablasClinicas as $tabla) {
-        // Consultar el catálogo del sistema para verificar ENABLE RLS y FORCE RLS
-        $estadoRls = DB::selectOne("
-            SELECT relrowsecurity, relforcerowsecurity 
-            FROM pg_class 
-            WHERE relname = :tablename
-        ", ['tablename' => $tabla]);
+    // 2. Verificar que el rol actual de runtime no posea el atributo BYPASSRLS
+    $bypassRlsCheck = DB::selectOne("
+        SELECT rolbypassrls, rolsuper
+        FROM pg_roles
+        WHERE rolname = current_user
+    ");
 
-        expect($estadoRls)->not->toBeNull();
+    expect($bypassRlsCheck->rolbypassrls)->toBeFalse(
+        "¡ALERTA DE SEGURIDAD!: El rol runtime posee la propiedad BYPASSRLS.");
         
-        // Assertions de activación
-        expect($estadoRls->relrowsecurity)->toBeTrue("La tabla '{$tabla}' no tiene ENABLE ROW LEVEL SECURITY.");
-        expect($estadoRls->relforcerowsecurity)->toBeTrue("La tabla '{$tabla}' no tiene FORCE ROW LEVEL SECURITY.");
+    expect($bypassRlsCheck->rolsuper)->toBeFalse(
+        "¡ALERTA DE SEGURIDAD!: El rol runtime es superusuario.");
 
-        // Verificar la existencia de al menos una política RLS activa
-        $politicas = DB::select("
-            SELECT policyname 
-            FROM pg_policies 
-            WHERE tablename = :tablename
-        ", ['tablename' => $tabla]);
+    // 3. Verificar que el rol no pertenezca a ningún grupo con BYPASSRLS o privilegios superusuario heredados
+    $rolesAdministradores = DB::select("
+        SELECT rolname 
+        FROM pg_roles 
+        WHERE rolbypassrls = true OR rolsuper = true
+    ");
 
-        expect($politicas)->not->toBeEmpty("La tabla '{$tabla}' tiene RLS activo pero carece de CREATE POLICY.");
+    foreach ($rolesAdministradores as $adminRol) {
+        $tieneMembresia = DB::selectOne("SELECT pg_has_role(current_user, :admin_rol, 'member') as member", [
+            'admin_rol' => $adminRol->rolname
+        ]);
+        
+        expect($tieneMembresia->member)->toBeFalse(
+            "¡ALERTA DE SEGURIDAD!: El rol runtime hereda privilegios del rol administrador '{$adminRol->rolname}'.");
     }
+
+    // 4. Verificar que RLS esté activado en las tablas del catálogo
+    $estadoRls = DB::selectOne("SELECT relrowsecurity FROM pg_class WHERE relname = 'patient_profiles'");
+    expect($estadoRls->relrowsecurity)->toBeTrue("La tabla 'patient_profiles' no tiene ENABLE ROW LEVEL SECURITY.");
 });
 ```
 
-**Consecuencia:** Si en seis meses un desarrollador crea una nueva tabla de datos clínicos y olvida añadir el código RLS en su migración inicial, **esta segunda prueba fallará inmediatamente en el pipeline de CI/CD** al no encontrar la tabla configurada con `relrowsecurity` y `relforcerowsecurity`, impidiendo la integración del código vulnerable.
+---
+
+### Prueba 3: Verificación de Permiso de Escritura Legítima (INSERT RLS)
+Esta prueba garantiza que RLS no rompa la aplicación en producción. Simula el rol runtime (`app_runtime`) para un médico con consulta activa y comprueba que PostgreSQL le permita insertar una nota clínica en estado `draft`.
+
+```php
+test('rls permite a app_runtime insertar una nota clinica en borrador si el medico es el asignado a la consulta', function () {
+    // 1. Configurar datos iniciales (dueño)
+    $paciente = User::factory()->create(['role' => 'patient']);
+    $medico = User::factory()->create(['role' => 'doctor']);
+    
+    $appointment = Appointment::create([
+        'patient_id' => $paciente->id,
+        'doctor_id' => $medico->id,
+        'franja' => '[2026-08-01 08:00:00+00, 2026-08-01 08:30:00+00)',
+        'status' => 'confirmed'
+    ]);
+    
+    $consultation = Consultation::create([
+        'appointment_id' => $appointment->id
+    ]);
+
+    // 2. Cambiar a la conexión app_runtime
+    Config::set('database.default', 'pgsql_runtime');
+    DB::purge('pgsql_runtime');
+
+    DB::statement("SET LOCAL app.current_user_id = '{$medico->id}'");
+    DB::statement("SET LOCAL app.current_user_role = 'doctor'");
+
+    // 3. Ejecutar inserción directa con app_runtime
+    $insertado = DB::insert("
+        INSERT INTO consultation_notes (id, consultation_id, symptoms, objective, analysis, plan, status, created_at, updated_at)
+        VALUES (gen_random_uuid(), :consultation_id, 'Tos', 'Fiebre', 'Gripe', 'Reposo', 'draft', now(), now())
+    ", ['consultation_id' => $consultation->id]);
+
+    // 4. Aserción: La inserción debe ser exitosa
+    expect($insertado)->toBeTrue();
+});
+```

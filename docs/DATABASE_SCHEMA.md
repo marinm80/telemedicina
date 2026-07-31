@@ -6,7 +6,38 @@
 
 ---
 
-## 1. SQL Crudo Completo de la Migración Inicial (Con RLS Activo)
+## 1. Configuración de Roles y Seguridad (Opción A)
+
+Para garantizar la seguridad de Row-Level Security (RLS) sin bloquear las tareas administrativas y el agendamiento del CLI (seeders, comandos Artisan, backfills), se implementa una arquitectura de **Bifurcación de Roles de Conexión**:
+
+* **`app_owner`:** Rol administrador de la base de datos y dueño de las tablas. No está sujeto a las reglas de RLS por defecto. Ejecuta las migraciones (`php artisan migrate --database=pgsql_owner`) y la siembra de datos (`db:seed`).
+* **`app_runtime`:** Rol de runtime limitado utilizado por la aplicación web Laravel. No es dueño de las tablas, no posee privilegios de superusuario ni el atributo `BYPASSRLS`. RLS le aplica de forma natural y obligatoria en todas las consultas DML.
+
+### Sentencias SQL de Configuración de Roles (Ejecutadas por Superusuario)
+```sql
+-- Crear los dos roles de conexión
+CREATE ROLE app_owner WITH LOGIN PASSWORD 'secure_owner_pass';
+CREATE ROLE app_runtime WITH LOGIN PASSWORD 'secure_runtime_pass';
+
+-- Otorgar privilegios de esquema al dueño
+GRANT ALL PRIVILEGES ON SCHEMA public TO app_owner;
+
+-- Configurar privilegios básicos del runtime sobre el esquema y secuencias (sin UPDATE en secuencias)
+GRANT USAGE ON SCHEMA public TO app_runtime;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_runtime;
+
+-- Seguridad por defecto: toda tabla nueva nace en modo SOLO LECTURA (SELECT) para app_runtime.
+-- Las migraciones de escritura deberán conceder privilegios explícitos mediante sentencias GRANT puntuales.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO app_runtime;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO app_runtime;
+
+-- IMPORTANTE: app_runtime NO tiene BYPASSRLS ni es superusuario
+ALTER ROLE app_runtime NOBYPASSRLS;
+```
+
+---
+
+## 2. SQL Crudo Completo de la Migración Inicial (Con RLS y Privilegios Explícitos)
 
 ```sql
 -- ====================================================================
@@ -301,7 +332,7 @@ CREATE TABLE patient_allergies (
     patient_profile_id uuid NOT NULL REFERENCES patient_profiles(id) ON DELETE RESTRICT,
     substance          varchar(150) NOT NULL,
     type               varchar(20) NOT NULL,
-    text_severity      varchar(20) NOT NULL, -- Renombrado para evitar conflicto con la palabra reservada 'severity'
+    text_severity      varchar(20) NOT NULL,
     reaction           text NOT NULL,
     declarada_por      uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     confirmada_por     uuid NULL REFERENCES users(id) ON DELETE RESTRICT,
@@ -339,7 +370,17 @@ CREATE TABLE patient_medications (
     updated_at         timestamptz NOT NULL DEFAULT now()
 );
 
--- 23. Logs de Auditoría
+-- 23. Ficha Longitudinal: Signos Vitales (Reportados por Paciente)
+CREATE TABLE vital_signs (
+    id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    appointment_id uuid NOT NULL REFERENCES appointments(id) ON DELETE RESTRICT,
+    peso           decimal(5,2) NOT NULL,
+    presion        varchar(20) NOT NULL,
+    temperatura    decimal(4,2) NOT NULL,
+    created_at     timestamptz NOT NULL DEFAULT now()
+);
+
+-- 24. Logs de Auditoría
 CREATE TABLE audit_logs (
     id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     table_name varchar(100) NOT NULL,
@@ -413,189 +454,343 @@ CREATE INDEX IF NOT EXISTS patient_conditions_patient_profile_id_idx ON patient_
 -- patient_medications
 CREATE INDEX IF NOT EXISTS patient_medications_patient_profile_id_idx ON patient_medications (patient_profile_id);
 
+-- vital_signs
+CREATE INDEX IF NOT EXISTS vital_signs_appointment_id_idx ON vital_signs (appointment_id);
+
 -- audit_logs
 CREATE INDEX IF NOT EXISTS audit_logs_user_id_idx ON audit_logs (user_id);
 CREATE INDEX IF NOT EXISTS audit_logs_lookup_idx ON audit_logs (table_name, record_id);
 
 
 -- ====================================================================
--- ACTIVACIÓN Y CONFIGURACIÓN DE ROW-LEVEL SECURITY (RLS)
+-- CONCESIÓN DE PRIVILEGIOS SELECTIVOS TABLA POR TABLA A app_runtime
 -- ====================================================================
 
+-- 1. Tablas Clínicas/Transaccionales Inmutables (No UPDATE/DELETE)
+GRANT SELECT, INSERT ON audit_logs TO app_runtime;
+GRANT SELECT, INSERT ON note_amendments TO app_runtime;
+GRANT SELECT, INSERT ON processed_stripe_events TO app_runtime;
+GRANT SELECT, INSERT ON vital_signs TO app_runtime;
+GRANT SELECT, INSERT ON consultation_messages TO app_runtime;
+GRANT SELECT, INSERT ON pre_consultation_forms TO app_runtime;
+
+-- 2. Tablas Clínicas Modificables pero nunca eliminables (SELECT, INSERT, UPDATE, no DELETE)
+GRANT SELECT, INSERT, UPDATE ON consultation_notes TO app_runtime;
+
+-- 3. Tablas de Gestión y Perfiles (SELECT, INSERT, UPDATE, no DELETE)
+GRANT SELECT, INSERT, UPDATE ON users TO app_runtime;
+GRANT SELECT, INSERT, UPDATE ON patient_profiles TO app_runtime;
+GRANT SELECT, INSERT, UPDATE ON doctor_profiles TO app_runtime;
+GRANT SELECT, INSERT, UPDATE ON appointments TO app_runtime;
+GRANT SELECT, INSERT, UPDATE ON payments TO app_runtime;
+GRANT SELECT, INSERT, UPDATE ON commissions TO app_runtime;
+GRANT SELECT, INSERT, UPDATE ON consultations TO app_runtime;
+
+-- 4. Fichas Longitudinales del Paciente (SELECT, INSERT, UPDATE, no DELETE)
+GRANT SELECT, INSERT, UPDATE ON patient_allergies TO app_runtime;
+GRANT SELECT, INSERT, UPDATE ON patient_conditions TO app_runtime;
+GRANT SELECT, INSERT, UPDATE ON patient_medications TO app_runtime;
+
+-- 5. Tablas Administrativas y de Soporte (Permisos de Gestión completos)
+GRANT SELECT, INSERT, DELETE ON doctor_specialties TO app_runtime;
+GRANT SELECT, INSERT, DELETE ON user_roles TO app_runtime;
+GRANT SELECT, INSERT, DELETE ON user_permissions TO app_runtime;
+GRANT SELECT, INSERT, DELETE ON documents TO app_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON schedules TO app_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON schedule_blocks TO app_runtime;
+
+-- 6. Tablas de Configuración (Solo Lectura)
+GRANT SELECT ON roles TO app_runtime;
+GRANT SELECT ON permissions TO app_runtime;
+GRANT SELECT ON specialties TO app_runtime;
+GRANT SELECT ON role_permissions TO app_runtime;
+
+
+-- ====================================================================
+-- ACTIVACIÓN Y CONFIGURACIÓN DE ROW-LEVEL SECURITY (RLS BIFURCADO)
+-- ====================================================================
+
+-- --------------------------------------------------------------------
 -- 1. patient_profiles
+-- --------------------------------------------------------------------
 ALTER TABLE patient_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE patient_profiles FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY patient_profiles_rls ON patient_profiles
-FOR ALL
-USING (
-    current_setting('app.current_user_role', true) = 'admin'
-    OR user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-    OR (
-        current_setting('app.current_user_role', true) = 'doctor'
-        AND EXISTS (
-            SELECT 1 FROM appointments a
-            WHERE a.patient_id = patient_profiles.user_id
-              AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-              AND a.status IN ('confirmed', 'completed')
+CREATE POLICY patient_profiles_select ON patient_profiles
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_role', true) = 'admin'
+        OR user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        OR (
+            current_setting('app.current_user_role', true) = 'doctor'
+            AND EXISTS (
+                SELECT 1 FROM appointments a
+                WHERE a.patient_id = patient_profiles.user_id
+                  AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  AND a.status IN ('confirmed', 'completed')
+            )
         )
-    )
-);
+    );
 
+CREATE POLICY patient_profiles_insert ON patient_profiles
+    FOR INSERT
+    WITH CHECK (
+        user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        OR current_setting('app.current_user_role', true) = 'agent'
+        OR current_setting('app.current_user_role', true) = 'admin'
+    );
+
+CREATE POLICY patient_profiles_update ON patient_profiles
+    FOR UPDATE
+    USING (
+        user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        OR current_setting('app.current_user_role', true) = 'admin'
+    )
+    WITH CHECK (
+        user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        OR current_setting('app.current_user_role', true) = 'admin'
+    );
+
+-- --------------------------------------------------------------------
 -- 2. patient_allergies
+-- --------------------------------------------------------------------
 ALTER TABLE patient_allergies ENABLE ROW LEVEL SECURITY;
-ALTER TABLE patient_allergies FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY patient_allergies_rls ON patient_allergies
-FOR ALL
-USING (
-    EXISTS (
-        SELECT 1 FROM patient_profiles p
-        WHERE p.id = patient_profile_id
-          AND (
-              current_setting('app.current_user_role', true) = 'admin'
-              OR p.user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-              OR (
-                  current_setting('app.current_user_role', true) = 'doctor'
-                  AND EXISTS (
-                      SELECT 1 FROM appointments a
-                      WHERE a.patient_id = p.user_id
-                        AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-                        AND a.status IN ('confirmed', 'completed')
+CREATE POLICY patient_allergies_select ON patient_allergies
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM patient_profiles p
+            WHERE p.id = patient_profile_id
+              AND (
+                  current_setting('app.current_user_role', true) = 'admin'
+                  OR p.user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR (
+                      current_setting('app.current_user_role', true) = 'doctor'
+                      AND EXISTS (
+                          SELECT 1 FROM appointments a
+                          WHERE a.patient_id = p.user_id
+                            AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                            AND a.status IN ('confirmed', 'completed')
+                      )
                   )
               )
-          )
-    )
-);
+        )
+    );
 
--- 3. patient_conditions
-ALTER TABLE patient_conditions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE patient_conditions FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY patient_conditions_rls ON patient_conditions
-FOR ALL
-USING (
-    EXISTS (
-        SELECT 1 FROM patient_profiles p
-        WHERE p.id = patient_profile_id
-          AND (
-              current_setting('app.current_user_role', true) = 'admin'
-              OR p.user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-              OR (
-                  current_setting('app.current_user_role', true) = 'doctor'
-                  AND EXISTS (
-                      SELECT 1 FROM appointments a
-                      WHERE a.patient_id = p.user_id
-                        AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-                        AND a.status IN ('confirmed', 'completed')
+CREATE POLICY patient_allergies_insert ON patient_allergies
+    FOR INSERT
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM patient_profiles p
+            WHERE p.id = patient_profile_id
+              AND (
+                  p.user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR (
+                      current_setting('app.current_user_role', true) = 'doctor'
+                      AND EXISTS (
+                          SELECT 1 FROM appointments a
+                          WHERE a.patient_id = p.user_id
+                            AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                            AND a.status IN ('confirmed', 'completed')
+                      )
                   )
               )
-          )
-    )
-);
+        )
+    );
 
--- 4. patient_medications
-ALTER TABLE patient_medications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE patient_medications FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY patient_medications_rls ON patient_medications
-FOR ALL
-USING (
-    EXISTS (
-        SELECT 1 FROM patient_profiles p
-        WHERE p.id = patient_profile_id
-          AND (
-              current_setting('app.current_user_role', true) = 'admin'
-              OR p.user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-              OR (
-                  current_setting('app.current_user_role', true) = 'doctor'
-                  AND EXISTS (
-                      SELECT 1 FROM appointments a
-                      WHERE a.patient_id = p.user_id
-                        AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-                        AND a.status IN ('confirmed', 'completed')
+CREATE POLICY patient_allergies_update ON patient_allergies
+    FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM patient_profiles p
+            WHERE p.id = patient_profile_id
+              AND (
+                  p.user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR (
+                      current_setting('app.current_user_role', true) = 'doctor'
+                      AND EXISTS (
+                          SELECT 1 FROM appointments a
+                          WHERE a.patient_id = p.user_id
+                            AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                            AND a.status IN ('confirmed', 'completed')
+                      )
                   )
               )
-          )
-    )
-);
+        )
+    );
 
--- 5. appointments
+-- --------------------------------------------------------------------
+-- 3. appointments
+-- --------------------------------------------------------------------
 ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE appointments FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY appointments_rls ON appointments
-FOR ALL
-USING (
-    current_setting('app.current_user_role', true) = 'admin'
-    OR current_setting('app.current_user_role', true) = 'agent'
-    OR patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-    OR doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-);
+CREATE POLICY appointments_select ON appointments
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_role', true) = 'admin'
+        OR current_setting('app.current_user_role', true) = 'agent'
+        OR patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        OR doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+    );
 
--- 6. pre_consultation_forms
+CREATE POLICY appointments_insert ON appointments
+    FOR INSERT
+    WITH CHECK (
+        current_setting('app.current_user_role', true) = 'admin'
+        OR current_setting('app.current_user_role', true) = 'agent'
+        OR patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+    );
+
+CREATE POLICY appointments_update ON appointments
+    FOR UPDATE
+    USING (
+        current_setting('app.current_user_role', true) = 'admin'
+        OR current_setting('app.current_user_role', true) = 'agent'
+        OR patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        OR doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+    );
+
+-- --------------------------------------------------------------------
+-- 4. pre_consultation_forms
+-- --------------------------------------------------------------------
 ALTER TABLE pre_consultation_forms ENABLE ROW LEVEL SECURITY;
-ALTER TABLE pre_consultation_forms FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY pre_consultation_forms_rls ON pre_consultation_forms
-FOR ALL
-USING (
-    EXISTS (
-        SELECT 1 FROM appointments a
-        WHERE a.id = appointment_id
-          AND (
-              current_setting('app.current_user_role', true) = 'admin'
-              OR a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-              OR a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-          )
-    )
-);
+CREATE POLICY pre_consultation_forms_select ON pre_consultation_forms
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM appointments a
+            WHERE a.id = appointment_id
+              AND (
+                  current_setting('app.current_user_role', true) = 'admin'
+                  OR a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+              )
+        )
+    );
 
--- 7. consultations
+CREATE POLICY pre_consultation_forms_insert ON pre_consultation_forms
+    FOR INSERT
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM appointments a
+            WHERE a.id = appointment_id
+              AND (
+                  a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR current_setting('app.current_user_role', true) = 'admin'
+              )
+        )
+    );
+
+-- --------------------------------------------------------------------
+-- 5. consultations
+-- --------------------------------------------------------------------
 ALTER TABLE consultations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE consultations FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY consultations_rls ON consultations
-FOR ALL
-USING (
-    current_setting('app.current_user_role', true) = 'admin'
-    OR EXISTS (
-        SELECT 1 FROM appointments a
-        WHERE a.id = appointment_id
-          AND (
-              a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-              OR a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-          )
-    )
-);
+CREATE POLICY consultations_select ON consultations
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_role', true) = 'admin'
+        OR EXISTS (
+            SELECT 1 FROM appointments a
+            WHERE a.id = appointment_id
+              AND (
+                  a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+              )
+        )
+    );
 
--- 8. consultation_messages
+CREATE POLICY consultations_insert ON consultations
+    FOR INSERT
+    WITH CHECK (
+        current_setting('app.current_user_role', true) = 'admin'
+        OR EXISTS (
+            SELECT 1 FROM appointments a
+            WHERE a.id = appointment_id
+              AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        )
+    );
+
+-- --------------------------------------------------------------------
+-- 6. consultation_messages
+-- --------------------------------------------------------------------
 ALTER TABLE consultation_messages ENABLE ROW LEVEL SECURITY;
-ALTER TABLE consultation_messages FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY consultation_messages_rls ON consultation_messages
-FOR ALL
-USING (
-    EXISTS (
-        SELECT 1 FROM consultations c
-        JOIN appointments a ON a.id = c.appointment_id
-        WHERE c.id = consultation_id
-          AND (
-              a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-              OR a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-          )
-    )
-);
+CREATE POLICY consultation_messages_select ON consultation_messages
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM consultations c
+            JOIN appointments a ON a.id = c.appointment_id
+            WHERE c.id = consultation_id
+              AND (
+                  a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+              )
+        )
+    );
 
--- 9. consultation_notes
+CREATE POLICY consultation_messages_insert ON consultation_messages
+    FOR INSERT
+    WITH CHECK (
+        sender_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        AND EXISTS (
+            SELECT 1 FROM consultations c
+            JOIN appointments a ON a.id = c.appointment_id
+            WHERE c.id = consultation_id
+              AND (
+                  a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+              )
+        )
+    );
+
+-- --------------------------------------------------------------------
+-- 7. consultation_notes
+-- --------------------------------------------------------------------
 ALTER TABLE consultation_notes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE consultation_notes FORCE ROW LEVEL SECURITY;
 
-CREATE POLICY consultation_notes_rls ON consultation_notes
-FOR ALL
-USING (
-    (
-        current_setting('app.current_user_role', true) = 'doctor'
+CREATE POLICY consultation_notes_select ON consultation_notes
+    FOR SELECT
+    USING (
+        (
+            current_setting('app.current_user_role', true) = 'doctor'
+            AND EXISTS (
+                SELECT 1 FROM consultations c
+                JOIN appointments a ON a.id = c.appointment_id
+                WHERE c.id = consultation_notes.consultation_id
+                  AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+            )
+        )
+        OR (
+            current_setting('app.current_user_role', true) = 'patient'
+            AND status = 'firmada'
+            AND EXISTS (
+                SELECT 1 FROM consultations c
+                JOIN appointments a ON a.id = c.appointment_id
+                WHERE c.id = consultation_notes.consultation_id
+                  AND a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+            )
+        )
+    );
+
+CREATE POLICY consultation_notes_insert ON consultation_notes
+    FOR INSERT
+    WITH CHECK (
+        status = 'draft'
+        AND EXISTS (
+            SELECT 1 FROM consultations c
+            JOIN appointments a ON a.id = c.appointment_id
+            WHERE c.id = consultation_id
+              AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        )
+    );
+
+CREATE POLICY consultation_notes_update ON consultation_notes
+    FOR UPDATE
+    USING (
+        status = 'draft'
         AND EXISTS (
             SELECT 1 FROM consultations c
             JOIN appointments a ON a.id = c.appointment_id
@@ -603,60 +798,122 @@ USING (
               AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
         )
     )
-    OR (
-        current_setting('app.current_user_role', true) = 'patient'
-        AND status = 'firmada'
+    WITH CHECK (
+        (status = 'draft')
+        OR (
+            status = 'firmada'
+            AND signed_by = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        )
+    );
+
+-- --------------------------------------------------------------------
+-- 8. note_amendments
+-- --------------------------------------------------------------------
+ALTER TABLE note_amendments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY note_amendments_select ON note_amendments
+    FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM consultation_notes n
+            JOIN consultations c ON c.id = n.consultation_id
+            JOIN appointments a ON a.id = c.appointment_id
+            WHERE n.id = consultation_note_id
+              AND (
+                  (current_setting('app.current_user_role', true) = 'doctor' AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid)
+                  OR (current_setting('app.current_user_role', true) = 'patient' AND a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid AND n.status = 'firmada')
+              )
+        )
+    );
+
+CREATE POLICY note_amendments_insert ON note_amendments
+    FOR INSERT
+    WITH CHECK (
+        author_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        AND EXISTS (
+            SELECT 1 FROM consultation_notes n
+            JOIN consultations c ON c.id = n.consultation_id
+            JOIN appointments a ON a.id = c.appointment_id
+            WHERE n.id = consultation_note_id
+              AND n.status = 'firmada'
+              AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        )
+    );
+
+-- --------------------------------------------------------------------
+-- 9. documents
+-- --------------------------------------------------------------------
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY documents_select ON documents
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_role', true) = 'admin'
+        OR EXISTS (
+            SELECT 1 FROM consultations c
+            JOIN appointments a ON a.id = c.appointment_id
+            WHERE c.id = documents.consultation_id
+              AND (
+                  a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+              )
+        )
+    );
+
+CREATE POLICY documents_insert ON documents
+    FOR INSERT
+    WITH CHECK (
+        uploaded_by = NULLIF(current_setting('app.current_user_id', true), '')::uuid
         AND EXISTS (
             SELECT 1 FROM consultations c
             JOIN appointments a ON a.id = c.appointment_id
-            WHERE c.id = consultation_notes.consultation_id
-              AND a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+            WHERE c.id = consultation_id
+              AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
         )
-    )
-);
+    );
 
--- 10. note_amendments
-ALTER TABLE note_amendments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE note_amendments FORCE ROW LEVEL SECURITY;
+CREATE POLICY documents_delete ON documents
+    FOR DELETE
+    USING (
+        uploaded_by = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+    );
 
-CREATE POLICY note_amendments_rls ON note_amendments
-FOR ALL
-USING (
-    EXISTS (
-        SELECT 1 FROM consultation_notes n
-        JOIN consultations c ON c.id = n.consultation_id
-        JOIN appointments a ON a.id = c.appointment_id
-        WHERE n.id = consultation_note_id
-          AND (
-              (current_setting('app.current_user_role', true) = 'doctor' AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid)
-              OR (current_setting('app.current_user_role', true) = 'patient' AND a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid AND n.status = 'firmada')
-          )
-    )
-);
+-- --------------------------------------------------------------------
+-- 10. vital_signs
+-- --------------------------------------------------------------------
+ALTER TABLE vital_signs ENABLE ROW LEVEL SECURITY;
 
--- 11. documents
-ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE documents FORCE ROW LEVEL SECURITY;
+CREATE POLICY vital_signs_select ON vital_signs
+    FOR SELECT
+    USING (
+        current_setting('app.current_user_role', true) = 'admin'
+        OR EXISTS (
+            SELECT 1 FROM appointments a
+            WHERE a.id = appointment_id
+              AND (
+                  a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+              )
+        )
+    );
 
-CREATE POLICY documents_rls ON documents
-FOR ALL
-USING (
-    current_setting('app.current_user_role', true) = 'admin'
-    OR EXISTS (
-        SELECT 1 FROM consultations c
-        JOIN appointments a ON a.id = c.appointment_id
-        WHERE c.id = documents.consultation_id
-          AND (
-              a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-              OR a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
-          )
-    )
-);
+CREATE POLICY vital_signs_insert ON vital_signs
+    FOR INSERT
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM appointments a
+            WHERE a.id = appointment_id
+              AND (
+                  a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+                  OR current_setting('app.current_user_role', true) = 'admin'
+              )
+        )
+    );
 ```
 
 ---
 
-## 2. Índices CONCURRENTLY y Transacciones en Laravel
+## 3. Índices CONCURRENTLY y Transacciones en Laravel
 
 ### El Problema
 Al ejecutar migraciones, Laravel envuelve automáticamente el contenido de los métodos `up()` y `down()` en una transacción de base de datos (`DB::beginTransaction()`).
@@ -703,7 +960,7 @@ class CreateCitasIndicesConcurrentes extends Migration
 
 ---
 
-## 3. Verificación de Índices en Claves Foráneas
+## 4. Verificación de Índices en Claves Foráneas
 
 PostgreSQL no indexa automáticamente las claves foráneas. A continuación se confirma de forma exhaustiva, tabla por tabla, que toda FK posee un índice correspondiente:
 
@@ -760,12 +1017,14 @@ PostgreSQL no indexa automáticamente las claves foráneas. A continuación se c
     - `patient_profile_id` (Indexado por `patient_conditions_patient_profile_id_idx`).
 20. **`patient_medications`:**
     - `patient_profile_id` (Indexado por `patient_medications_patient_profile_id_idx`).
-21. **`audit_logs`:**
+21. **`vital_signs`:**
+    - `appointment_id` (Indexado por `vital_signs_appointment_id_idx`).
+22. **`audit_logs`:**
     - `user_id` (Indexado por `audit_logs_user_id_idx`).
 
 ---
 
-## 4. Declaración de Riesgo de la Migración Inicial
+## 5. Declaración de Riesgo de la Migración Inicial
 
 > [!IMPORTANT]
 > **DECLARACIÓN DE RIESGO — MIGRACIÓN INICIAL FASE 1**
@@ -781,6 +1040,7 @@ PostgreSQL no indexa automáticamente las claves foráneas. A continuación se c
 ### Plan de Reversa en SQL Crudo
 ```sql
 DROP TABLE IF EXISTS audit_logs CASCADE;
+DROP TABLE IF EXISTS vital_signs CASCADE;
 DROP TABLE IF EXISTS patient_medications CASCADE;
 DROP TABLE IF EXISTS patient_conditions CASCADE;
 DROP TABLE IF EXISTS patient_allergies CASCADE;
@@ -813,7 +1073,7 @@ DROP EXTENSION IF EXISTS "uuid-ossp";
 
 ---
 
-## 5. Informe Adversarial
+## 6. Informe Adversarial
 
 A continuación se listan los 5 riesgos técnicos más graves detectados sobre el esquema de base de datos propuesto, ordenados de mayor a menor según su nivel de **irreversibilidad** clínica y de negocio:
 
@@ -834,7 +1094,7 @@ A continuación se listan los 5 riesgos técnicos más graves detectados sobre e
 
 ### 4. Desbordamiento y desajuste por tipos de datos de precisión en `commissions`
 * **Riesgo:** El uso del tipo `decimal(5,2)` para `commission_rate` (ej: 15.00) y `decimal(10,2)` para dinero es seguro para importes tradicionales. Sin embargo, si en un futuro la plataforma maneja micro-pagos o conversiones fraccionadas complejas de pasarelas de pago, los decimales de dos dígitos truncarán decimales, generando descuadres contables centavo a centavo.
-* **Irreversibilidad:** **MEDIA.** Modificar la precisión de una columna decimal con miles de registros financieros requiere un bloqueo temporal de escritura y recalculado de filos.
+* **Irreversibilidad:** **MEDIA.** Modificar la precisión de una columna decimal con miles de registros financieros requiere un bloqueo temporal de escritura y recalculado de filas.
 * **Mitigación:** Utilizar siempre `decimal(12,4)` internamente para cálculos monetarios y formatear a dos decimales exclusivamente en la capa de vista.
 
 ### 5. Incompatibilidad de Husos Horarios por cadenas no normalizadas en `users.timezone`
