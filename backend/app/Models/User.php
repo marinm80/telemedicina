@@ -21,6 +21,27 @@ final class User extends Authenticatable
     use HasFactory, Notifiable, HasUuids;
 
     /**
+     * Columnas que app_runtime puede leer vía GRANT SELECT de columna.
+     * password y remember_token están FUERA: el acceso privilegiado pasa
+     * por fn_user_for_auth (SECURITY DEFINER), no por SELECT directo.
+     *
+     * Un SELECT * fallaría con "permission denied" por el GRANT columna.
+     * Este scope fuerza SELECT explícito en TODA consulta Eloquent.
+     */
+    private const SELECTABLE_COLUMNS = [
+        'id', 'name', 'last_name', 'email', 'timezone',
+        'email_verified_at', 'is_active',
+        'created_at', 'updated_at', 'deleted_at',
+    ];
+
+    protected static function booted(): void
+    {
+        static::addGlobalScope('safe_columns', function (\Illuminate\Database\Eloquent\Builder $builder) {
+            $builder->select(self::SELECTABLE_COLUMNS);
+        });
+    }
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>

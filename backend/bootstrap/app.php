@@ -46,13 +46,6 @@ return Application::configure(basePath: dirname(__DIR__))
             ], 409);
         });
 
-        $exceptions->render(function (\App\Exceptions\DoctorNotApprovedException $e, Request $request) {
-            return response()->json([
-                'message' => $e->getMessage(),
-                'error_code' => 'DOCTOR_NOT_APPROVED'
-            ], 403);
-        });
-
         $exceptions->render(function (\App\Exceptions\DoctorNotFoundException $e, Request $request) {
             return response()->json([
                 'message' => $e->getMessage(),

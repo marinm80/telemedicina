@@ -43,8 +43,7 @@ Para evitar la fuga de información privada mediante enumeración de identificad
 
 * **Auth / Roles:** Requiere autenticación (Sanctum). Accesible para: `patient`, `agent`, `admin`.
 * **Criterio 403 vs 404:**
-  * Si el UUID `{id}` del médico no existe en el sistema -> **`404 Not Found`**.
-  * Si el médico existe pero está en estado `pending` o `rejected` por administración -> **`403 Forbidden`** (se sabe que existe el registro pero la agenda no está habilitada).
+  * Si el UUID `{id}` del médico no existe en el sistema, o si el médico existe pero está en estado `pending` o `rejected` -> **`404 Not Found`** (regla de aislamiento de existencia: no revelar que el aspirante existe).
 * **Parámetros de Consulta (Query Parameters):**
   * `date`: `string (format: YYYY-MM-DD, obligatorio)`. Ejemplo: `2026-08-03`.
 * **Respuesta 200 OK:**
@@ -134,12 +133,14 @@ Para evitar la fuga de información privada mediante enumeración de identificad
 ---
 
 ### Endpoint 3: `POST /api/appointments/{id}/reschedule-request`
-*Solicitud de reprogramación iniciada por paciente o médico. La cita original permanece activa hasta la aprobación.*
+*Solicitud de reprogramación iniciada por paciente o agente. La cita original permanece intacta hasta la aprobación del médico. La solicitud se crea en `reschedule_requests` — NO muta el estado de `appointments`. El médico NO reprograma; si quiere mover la cita, cancela (ver Endpoint 5).*
 
-* **Auth / Roles:** Requiere autenticación. Accesible para: `patient`, `doctor`.
+* **Auth / Roles:** Requiere autenticación. Accesible para: `patient`, `agent`.
 * **Criterio 403 vs 404:**
-  * Si el `{id}` de la cita no existe en base de datos, o si existe pero el solicitante no es el paciente ni el médico asociado a ella -> **`404 Not Found`** (Oculta la existencia de citas de terceros).
-  * Si la cita pertenece al solicitante pero su estado es `cancelled` o `completed` -> **`403 Forbidden`** (Sabe que existe la cita pero no se puede reprogramar en su estado actual).
+  * Si el `{id}` de la cita no existe, o si existe pero el solicitante no es el paciente ni un agente → **`404 Not Found`**.
+  * Si la cita pertenece al solicitante pero su estado es `cancelled` o `completed` → **`403 Forbidden`**.
+  * Si ya existe una solicitud `pending` para esta cita → **`409 Conflict`** con `error_code: RESCHEDULE_ALREADY_PENDING`.
+* **Protección del slot propuesto:** La tabla `reschedule_requests` tiene su propio `EXCLUDE USING gist (doctor_id WITH =, requested_franja WITH &&) WHERE (status = 'pending')`. Si el slot propuesto ya está reservado por otra cita activa O por otra solicitud pendiente del mismo médico → **`409 Conflict`** con `error_code: SLOT_ALREADY_BOOKED`.
 * **Cuerpo de Petición (Request Body):**
   ```json
   {
@@ -148,30 +149,38 @@ Para evitar la fuga de información privada mediante enumeración de identificad
     "motivo": "Conflicto con horario laboral"
   }
   ```
-* **Respuesta 200 OK:**
+* **Respuesta 201 Created:**
   ```json
   {
+    "id": "cc0e8400-e29b-41d4-a716-446655446666",
     "appointment_id": "770e8400-e29b-41d4-a716-446655442222",
-    "status": "pending_reschedule",
+    "status": "pending",
     "requested_by": "660e8400-e29b-41d4-a716-446655441111",
-    "nueva_franja": "[2026-08-04 15:00:00+00, 2026-08-04 15:30:00+00)",
-    "motivo": "Conflicto con horario laboral"
+    "requested_franja": "[2026-08-04 15:00:00+00, 2026-08-04 15:30:00+00)",
+    "reason": "Conflicto con horario laboral"
   }
   ```
 
 ---
 
 ### Endpoint 4: `PUT /api/appointments/{id}/reschedule-approve`
-*Aceptación transaccional de la solicitud de reprogramación por el médico.*
+*Aceptación transaccional de la solicitud de reprogramación por el médico. Ejecuta una sola transacción atómica: marca solicitud como `approved` + cancela la cita original + inserta la nueva cita con la restricción de exclusión activa.*
 
-* **Auth / Roles:** Requiere autenticación. Accesible para: `doctor` (aprobado).
+* **Auth / Roles:** Requiere autenticación. Accesible para: `doctor` (aprobado). **El agente NO puede aprobar** — aprobar es decisión del médico sobre su propia agenda.
 * **Criterio 403 vs 404:**
-  * Si la cita o la solicitud de reprogramación no existe, o si no pertenece a la agenda del médico autenticado -> **`404 Not Found`**.
-  * Si es su cita pero el médico se encuentra suspendido (`status` no es `approved`) -> **`403 Forbidden`**.
-* **Cuerpo de Petición:** Vacío (aprobación implícita de la solicitud activa).
+  * Si la cita no existe, o no pertenece a la agenda del médico autenticado, o no tiene solicitud `pending` → **`404 Not Found`**.
+  * Si es su cita pero el médico se encuentra suspendido (`status` no es `approved`) → **`403 Forbidden`**.
+  * Si el nuevo slot ya está ocupado al momento de insertar → **`409 Conflict`** con `error_code: SLOT_ALREADY_BOOKED`. La cita original permanece intacta.
+* **Cuerpo de Petición:** Vacío (aprobación implícita de la solicitud `pending` activa).
 * **Respuesta 200 OK:**
   ```json
   {
+    "reschedule_request": {
+      "id": "cc0e8400-e29b-41d4-a716-446655446666",
+      "status": "approved",
+      "resolved_by": "550e8400-e29b-41d4-a716-446655440000",
+      "resolved_at": "2026-08-03T12:00:00Z"
+    },
     "cita_original_cancelada": {
       "id": "770e8400-e29b-41d4-a716-446655442222",
       "status": "cancelled",
@@ -189,13 +198,42 @@ Para evitar la fuga de información privada mediante enumeración de identificad
 
 ---
 
-### Endpoint 5: `POST /api/appointments/{id}/cancel`
-*Cancelación de una cita existente. Gestiona el reembolso automático en Stripe si cumple la ventana temporal > 24 horas.*
+### Endpoint 4b: `PUT /api/appointments/{id}/reschedule-reject`
+*Rechazo de la solicitud de reprogramación por el médico. La solicitud se marca como `rejected` y la cita original permanece intacta.*
 
+* **Auth / Roles:** Requiere autenticación. Accesible para: `doctor` (aprobado).
+* **Criterio 403 vs 404:** Idéntico a `reschedule-approve`.
+* **Cuerpo de Petición:**
+  ```json
+  {
+    "motivo_rechazo": "No tengo disponibilidad en esa franja."
+  }
+  ```
+* **Respuesta 200 OK:**
+  ```json
+  {
+    "id": "cc0e8400-e29b-41d4-a716-446655446666",
+    "status": "rejected",
+    "resolved_by": "550e8400-e29b-41d4-a716-446655440000",
+    "resolved_at": "2026-08-03T12:05:00Z"
+  }
+  ```
+
+---
+
+### Endpoint 5: `POST /api/appointments/{id}/cancel`
+*Cancelación de una cita existente. Nota: la integración con Stripe (RF-12) está PENDIENTE; en esta entrega `refund_processed` se deja como `false`.*
+
+* **Regla de reembolso por actor:**
+  * `cancelled_by = doctor` → reembolso completo SIEMPRE, sin ventana de 24 horas. La decisión de mover la cita fue del médico, no del paciente.
+  * `cancelled_by = patient` o `agent` → reembolso sujeto a la ventana de 24 horas (pendiente de decisión final, ver DECISIONES_ALCANCE.md §10.5).
+* **Motivo:** `cancellation_reason` es **obligatorio** cuando `cancelled_by = doctor`. Opcional para paciente/agente.
+* **Notificación:** cuando el médico cancela, la notificación al paciente incluye **enlace directo a la disponibilidad actual del médico** (`GET /api/doctors/{id}/availability`). La comodidad va en la notificación, no en el modelo.
 * **Auth / Roles:** Requiere autenticación. Accesible para: `patient`, `doctor`, `agent`.
 * **Criterio 403 vs 404:**
-  * Si el `{id}` de la cita no existe, o pertenece a terceros y el solicitante no es un agente administrativo autorizado -> **`404 Not Found`**.
-  * Si pertenece al solicitante pero la cita ya fue finalizada (`completed`) -> **`403 Forbidden`**.
+  * Si el `{id}` de la cita no existe, o pertenece a terceros y el solicitante no es un agente administrativo autorizado → **`404 Not Found`**.
+  * Si pertenece al solicitante pero la cita ya fue finalizada (`completed`) → **`403 Forbidden`**.
+  * Si la cita ya está cancelada → **`403 Forbidden`**.
 * **Cuerpo de Petición (Request Body):**
   ```json
   {
@@ -209,7 +247,7 @@ Para evitar la fuga de información privada mediante enumeración de identificad
     "status": "cancelled",
     "cancelled_by": "660e8400-e29b-41d4-a716-446655441111",
     "cancellation_reason": "Paciente reporta imposibilidad de conexión por viaje.",
-    "refund_processed": true
+    "refund_processed": false
   }
   ```
 

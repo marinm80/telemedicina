@@ -9,12 +9,10 @@ declare(strict_types=1);
 
 namespace App\Actions\Appointments;
 
-use App\Models\User;
 use App\Models\Schedule;
-use App\Models\ScheduleBlock;
 use App\Models\Appointment;
 use Illuminate\Support\Carbon;
-use App\Exceptions\DoctorNotApprovedException;
+use Illuminate\Support\Facades\DB;
 
 final readonly class GetDoctorAvailabilityAction
 {
@@ -25,19 +23,18 @@ final readonly class GetDoctorAvailabilityAction
      */
     public function handle(string $doctorId, string $date): array
     {
-        // 1. Validar existencia del médico y su estado
-        $doctor = User::query()
-            ->where('id', $doctorId)
-            ->whereHas('roles', fn($q) => $q->where('name', 'doctor'))
-            ->with('doctorProfile')
+        // 1. Validar existencia del médico y su estado via vista pública.
+        //    v_doctor_directory filtra status='approved' AND is_active=true
+        //    con security_barrier=true. Un paciente no necesita SELECT en users
+        //    ni doctor_profiles para buscar médicos — la vista ES la frontera.
+        $directory = DB::table('v_doctor_directory')
+            ->where('user_id', $doctorId)
             ->first();
 
-        if (!$doctor) {
+        if (!$directory) {
+            // No revelar si el médico existe pero no está aprobado — eso es
+            // fuga de información. Si no está en el directorio público, 404.
             throw new \App\Exceptions\DoctorNotFoundException('Médico no encontrado.');
-        }
-
-        if (!$doctor->doctorProfile || $doctor->doctorProfile->status !== 'approved') {
-            throw new DoctorNotApprovedException('El perfil médico no está aprobado.');
         }
 
         $carbonDate = Carbon::parse($date);
@@ -45,14 +42,18 @@ final readonly class GetDoctorAvailabilityAction
 
         // 2. Obtener horarios recurrentes del médico para ese día
         $schedules = Schedule::query()
-            ->where('doctor_profile_id', $doctor->doctorProfile->id)
+            ->where('doctor_profile_id', $directory->doctor_profile_id)
             ->where('day_of_week', $dayOfWeek)
             ->where('is_active', true)
             ->get();
 
-        // 3. Obtener bloqueos de agenda para la fecha
-        $blocks = ScheduleBlock::query()
-            ->where('doctor_profile_id', $doctor->doctorProfile->id)
+        // 3. Obtener bloqueos de agenda para la fecha via vista pública.
+        //    v_schedule_blocks_availability excluye 'reason' (dato sensible:
+        //    motivo del bloqueo del médico) y filtra doctor aprobado.
+        //    Usar la vista en vez de GRANT de columna evita que el próximo
+        //    ScheduleBlock::all() explote en ejecución.
+        $blocks = DB::table('v_schedule_blocks_availability')
+            ->where('doctor_profile_id', $directory->doctor_profile_id)
             ->where('blocked_date', $date)
             ->get();
 
@@ -125,8 +126,8 @@ final readonly class GetDoctorAvailabilityAction
                 $slots[] = [
                     'start'       => $slotStartStr,
                     'end'         => $slotEndStr,
-                    'local_start' => $currentSlotInicio->setTimezone($doctor->timezone)->format('h:i A'),
-                    'local_end'   => $currentSlotFin->setTimezone($doctor->timezone)->format('h:i A'),
+                    'local_start' => $currentSlotInicio->setTimezone($directory->timezone)->format('h:i A'),
+                    'local_end'   => $currentSlotFin->setTimezone($directory->timezone)->format('h:i A'),
                     'available'   => $isAvailable,
                 ];
 
@@ -137,7 +138,7 @@ final readonly class GetDoctorAvailabilityAction
         return [
             'doctor_id' => $doctorId,
             'date'      => $date,
-            'timezone'  => $doctor->timezone,
+            'timezone'  => $directory->timezone,
             'slots'     => $slots,
         ];
     }

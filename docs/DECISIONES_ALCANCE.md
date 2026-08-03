@@ -33,7 +33,7 @@
 10. Pago con Stripe + **webhook idempotente**
 11. Cuestionario previo a la consulta
 12. **Consulta por chat** en tiempo real, persistente, tratado como dato clínico
-13. **Nota clínica** en formato SOAP: borrador → firmada
+13. **Nota clínica** en formato SOAP: draft → signed
 14. **Firma electrónica simple del médico**: hash de integridad, nota inmutable, **enmiendas** en lugar de ediciones
 15. **PDF del informe** materializado al firmar, generado en cola
 16. **Acuse de recibo del paciente** (opcional), que regenera el PDF con constancia
@@ -68,7 +68,7 @@
 |---|---|---|
 | **Paciente** | Registrarse, completar su ficha clínica, buscar médicos, reservar y cancelar, solicitar reprogramación, pagar, chatear en su consulta, ver y firmar el acuse de sus notas, descargar sus PDF | Ver historias de otros pacientes. Editar una nota clínica. Ver notas en borrador |
 | **Médico** | Configurar agenda y bloqueos, ver su lista de citas, chatear, ver la ficha clínica **solo de pacientes con quienes tiene o tuvo consulta**, redactar y firmar notas, enmendar, aprobar o rechazar reprogramaciones, subir documentos | Ver pacientes con quienes no tuvo consulta. Editar una nota ya firmada. Ver ingresos de otros médicos |
-| **Agente / recepcionista** | Crear pacientes y enviarles invitación, **reservar y cancelar en nombre del paciente**, reprogramar en su nombre, ver agenda y datos de contacto | **Ver la ficha clínica, la nota clínica o el chat. Nunca.** Es el límite de privacidad más importante del sistema |
+| **Agente / recepcionista** | Crear pacientes y enviarles invitación, **reservar y cancelar en nombre del paciente**, **solicitar reprogramación en nombre del paciente** (NO aprobarla — aprobar es decisión del médico sobre su propia agenda), ver agenda y datos de contacto | **Ver la ficha clínica, la nota clínica o el chat. Nunca.** Es el límite de privacidad más importante del sistema |
 | **Administrador** | Aprobar o rechazar médicos con motivo, gestionar especialidades, gestionar usuarios, otorgar y revocar permisos, ver auditoría | Desactivar su propia cuenta. Editar notas clínicas. Otorgarse permisos a sí mismo |
 
 **Sin interfaz — modelo sí, pantallas no:** Enfermera, Asistente de farmacia, Administrador de farmacia. Sus roles y permisos existen en las tablas y se validan por API. Declarar esto en el README del proyecto.
@@ -93,7 +93,7 @@ patient_conditions     condicion · desde · estado (activa/resuelta) · notas
 patient_medications    nombre · dosis · frecuencia · desde
 pre_consultation_forms motivo · sintomas   (lo llena el paciente ANTES de la cita)
 consultation_notes     motivo · sintomas · hallazgos · evaluacion · plan ·
-                       status (borrador|firmada) · content_hash · signed_by ·
+                       status (draft|signed) · content_hash · signed_by ·
                        signed_at · signed_ip · signed_user_agent ·
                        acknowledged_by · acknowledged_at · pdf_status · pdf_path
 note_amendments        nota_id · autor · motivo · contenido · created_at
@@ -142,11 +142,14 @@ audit_log              tabla · registro_id · accion · autor · antes · despu
 | **Crear horario del médico** | Solapamiento de franjas en el mismo día | Mismo mecanismo sobre `schedules` |
 | **Paciente duplica cita** | Dos citas con el mismo médico, misma fecha y hora | `UNIQUE` compuesto |
 | **Webhook de Stripe** | **Stripe reintenta: va a llegar dos veces** | Clave de idempotencia con `UNIQUE` sobre el id del evento. Verificar firma `Stripe-Signature` |
-| **Aprobar reprogramación** | Liberar el slot viejo y tomar el nuevo | **Una sola transacción**, con la restricción de exclusión activa. Si el nuevo slot ya está tomado, falla completo |
+| **Aprobar reprogramación** | Liberar el slot viejo y tomar el nuevo | Tabla separada `reschedule_requests` (solo paciente/agente solicitan, médico aprueba). EXCLUDE USING gist propio sobre `requested_franja`. Índice parcial único `WHERE status = 'pending'` por cita. La aprobación ejecuta **una sola transacción**: cancela la cita original + inserta la nueva. Si el nuevo slot ya está tomado, falla completo |
+| **Médico quiere mover la cita** | — | **El médico NO reprograma. Cancela.** Cancela con motivo obligatorio (`cancelled_by = doctor`), reembolso completo SIEMPRE (sin ventana de 24h). El paciente vuelve a reservar eligiendo de la disponibilidad actual. Cero estado intermedio, cero slot retenido, el paciente elige |
 | **Cita pendiente sin pago** | Bloquea el slot indefinidamente | Comando programado que expira a los 30 minutos |
 | **Firmar nota** | Doble firma, doble PDF | Transición de estado verificada en la base; el job de PDF es idempotente por `nota_id` |
 
 **Regla transversal:** ningún efecto externo —correo, notificación, generación de PDF— ocurre dentro de una transacción abierta. Todo después del commit, con `afterCommit` o encolado.
+
+**Principio de diseño:** ante una operación nueva, primero probar si se puede expresar con las garantías que ya existen. Agregar estado es la última opción, no la primera.
 
 ---
 
@@ -157,6 +160,7 @@ audit_log              tabla · registro_id · accion · autor · antes · despu
 - **El correo nunca lleva contenido clínico.** Es una notificación con enlace, y el enlace exige sesión. Si hay descarga de PDF, es un enlace **temporal y firmado** que caduca, nunca un adjunto.
 - Nadie puede otorgarse permisos a sí mismo.
 - El chat es **dato clínico**: se retiene, se audita y lo ve quien puede ver la consulta.
+- **Auditoría vía triggers de PostgreSQL, no listeners de Eloquent.** Un listener no captura escrituras por SQL directo (worker, migraciones, seeders). Los triggers interceptan toda escritura sin importar el origen. La función `fn_audit_log()` lee `current_setting('app.current_user_id', true)` para el actor; cuando no hay contexto HTTP (worker, migraciones), registra `current_user` (el rol de PostgreSQL) como actor de sistema.
 
 ---
 

@@ -27,10 +27,12 @@ final class SetPostgresSessionContext
         if (auth()->check()) {
             $user = auth()->user();
             $userId = $user->id;
-            $userRole = $user->role ?? 'patient';
 
-            // Establecer variables de contexto en PostgreSQL
+            // PRIMERO: establecer user_id para que RLS en user_roles permita el SELECT
             DB::statement("SET app.current_user_id = '{$userId}'");
+
+            // DESPUÉS: leer el rol (accede a user_roles vía getRoleAttribute)
+            $userRole = $user->role ?? 'patient';
             DB::statement("SET app.current_user_role = '{$userRole}'");
         } else {
             // Valores por defecto para invitados (guest)

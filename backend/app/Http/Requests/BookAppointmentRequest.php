@@ -36,12 +36,11 @@ final class BookAppointmentRequest extends FormRequest
             'doctor_id' => [
                 'required',
                 'uuid',
-                'exists:users,id',
-                Rule::exists('user_roles', 'user_id')->where(function ($query) {
-                    $query->where('role_id', function ($sub) {
-                        $sub->select('id')->from('roles')->where('name', 'doctor')->limit(1);
-                    });
-                })
+                // No usar exists:users,id — con users_select cerrado, el paciente
+                // no puede ver el User del doctor. La FK en doctor_profiles.user_id
+                // garantiza que si el perfil existe, el usuario existe.
+                Rule::exists('doctor_profiles', 'user_id')
+                    ->where('status', 'approved'),
             ],
             'franja_inicio' => ['required', 'date', 'after:now'],
             'franja_fin' => ['required', 'date', 'after:franja_inicio'],

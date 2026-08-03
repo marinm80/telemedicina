@@ -35,6 +35,7 @@ final class BookAppointmentTest extends TestCase
 
         // Limpiar tablas manualmente para evitar contaminación entre pruebas sin ocultar datos a PDO concurrentes
         $migrationConn = DB::connection('pgsql_migration');
+        $migrationConn->table('audit_logs')->delete();
         $migrationConn->table('note_amendments')->delete();
         $migrationConn->table('consultation_notes')->delete();
         $migrationConn->table('consultations')->delete();
@@ -44,21 +45,32 @@ final class BookAppointmentTest extends TestCase
         $migrationConn->table('doctor_profiles')->delete();
         $migrationConn->table('patient_profiles')->delete();
         $migrationConn->table('user_roles')->delete();
+        $migrationConn->table('audit_logs')->delete(); // triggers from deletes above may re-insert
         $migrationConn->table('users')->delete();
 
-        // 1. Inicializar roles en la base de datos si no existen
-        $this->patientRole = Role::firstOrCreate(['name' => 'patient'], ['description' => 'Paciente']);
-        $this->doctorRole = Role::firstOrCreate(['name' => 'doctor'], ['description' => 'Médico']);
+        // 1. Inicializar roles via pgsql_migration (roles table only has SELECT for app_runtime)
+        $this->patientRole = Role::where('name', 'patient')->first();
+        if (!$this->patientRole) {
+            $migrationConn->table('roles')->insert(['id' => Str::uuid()->toString(), 'name' => 'patient', 'description' => 'Paciente', 'created_at' => now(), 'updated_at' => now()]);
+            $this->patientRole = Role::where('name', 'patient')->first();
+        }
+        $this->doctorRole = Role::where('name', 'doctor')->first();
+        if (!$this->doctorRole) {
+            $migrationConn->table('roles')->insert(['id' => Str::uuid()->toString(), 'name' => 'doctor', 'description' => 'Médico', 'created_at' => now(), 'updated_at' => now()]);
+            $this->doctorRole = Role::where('name', 'doctor')->first();
+        }
 
-        // 2. Crear usuarios de prueba
+        // 2. Crear usuarios de prueba (users INSERT policy allows when no context is set)
         $this->patient = User::factory()->create();
-        $this->patient->roles()->attach($this->patientRole);
+        $migrationConn->table('user_roles')->insert(['user_id' => $this->patient->id, 'role_id' => $this->patientRole->id]);
 
         $this->doctor = User::factory()->create();
-        $this->doctor->roles()->attach($this->doctorRole);
+        $migrationConn->table('user_roles')->insert(['user_id' => $this->doctor->id, 'role_id' => $this->doctorRole->id]);
 
-        // Crear perfil médico aprobado
-        DoctorProfile::create([
+        // Crear perfil médico aprobado via pgsql_migration (doctor_profiles has RLS)
+        $doctorProfileId = Str::uuid()->toString();
+        $migrationConn->table('doctor_profiles')->insert([
+            'id' => $doctorProfileId,
             'user_id' => $this->doctor->id,
             'license_number' => 'LIC-' . Str::random(5),
             'university' => 'Universidad Nacional',
@@ -67,15 +79,21 @@ final class BookAppointmentTest extends TestCase
             'consultation_fee' => 50.00,
             'status' => 'approved',
             'approved_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
+        $this->doctor->load('doctorProfile');
 
-        // Crear horario los días Lunes (Lunes en Carbon es 1)
-        Schedule::create([
+        // Crear horario los días Lunes via pgsql_migration (schedules has RLS)
+        $migrationConn->table('schedules')->insert([
+            'id' => Str::uuid()->toString(),
             'doctor_profile_id' => $this->doctor->doctorProfile->id,
             'day_of_week' => 1,
             'franja' => '[09:00:00, 12:00:00)',
             'slot_duration' => 30,
             'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
     }
 
@@ -83,6 +101,7 @@ final class BookAppointmentTest extends TestCase
     {
         // Limpiar todas las tablas después de los tests
         $migrationConn = DB::connection('pgsql_migration');
+        $migrationConn->table('audit_logs')->delete();
         $migrationConn->table('note_amendments')->delete();
         $migrationConn->table('consultation_notes')->delete();
         $migrationConn->table('consultations')->delete();
@@ -92,6 +111,7 @@ final class BookAppointmentTest extends TestCase
         $migrationConn->table('doctor_profiles')->delete();
         $migrationConn->table('patient_profiles')->delete();
         $migrationConn->table('user_roles')->delete();
+        $migrationConn->table('audit_logs')->delete();
         $migrationConn->table('users')->delete();
 
         parent::tearDown();
@@ -125,18 +145,24 @@ final class BookAppointmentTest extends TestCase
         $this->assertTrue($slots[0]['available']);
     }
 
-    public function test_consultar_disponibilidad_doctor_no_aprobado_lanza_403(): void
+    public function test_consultar_disponibilidad_doctor_no_aprobado_lanza_404(): void
     {
         $this->actingAs($this->patient);
 
-        // Modificar estado del médico a pending
-        $this->doctor->doctorProfile->update(['status' => 'pending']);
+        // Modificar estado del médico a pending (fixture — pgsql_migration porque el paciente
+        // no tiene permiso de UPDATE en doctor_profiles por RLS)
+        DB::connection('pgsql_migration')->table('doctor_profiles')
+            ->where('user_id', $this->doctor->id)
+            ->update(['status' => 'pending']);
 
+        // Con la vista v_doctor_directory, un médico no aprobado no aparece.
+        // Devolver 404 en lugar de 403 es correcto: no revelar que el médico
+        // existe pero no está aprobado — fuga de información sobre aspirantes.
         $response = $this->getJson("/api/doctors/{$this->doctor->id}/availability?date=2026-08-10");
 
-        $response->assertStatus(403)
+        $response->assertStatus(404)
             ->assertJson([
-                'error_code' => 'DOCTOR_NOT_APPROVED'
+                'error_code' => 'RESOURCE_NOT_FOUND'
             ]);
     }
 
@@ -271,8 +297,29 @@ final class BookAppointmentTest extends TestCase
             ->assertStatus(201);
 
         // Intentar reservar el mismo slot como Paciente 2 (Fallo de colisión 409)
-        $paciente2 = User::factory()->create();
-        $paciente2->roles()->attach($this->patientRole);
+        // Crear usuario via pgsql_migration porque el contexto de la petición anterior
+        // dejó app.current_user_id seteado al paciente 1, y la policy de users INSERT
+        // solo permite INSERT sin contexto (registro) o como admin/agent.
+        $p2Id = Str::uuid()->toString();
+        $migrationConn = DB::connection('pgsql_migration');
+        $migrationConn->table('users')->insert([
+            'id' => $p2Id,
+            'name' => 'Paciente2',
+            'last_name' => 'Test',
+            'email' => 'paciente2_' . Str::random(5) . '@test.com',
+            'email_verified_at' => now(),
+            'password' => bcrypt('password'),
+            'timezone' => 'UTC',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $migrationConn->table('user_roles')->insert(['user_id' => $p2Id, 'role_id' => $this->patientRole->id]);
+
+        // Establecer contexto de paciente2 para que users_select (self) permita el find
+        DB::statement("SET app.current_user_id = '{$p2Id}'");
+        DB::statement("SET app.current_user_role = 'patient'");
+        $paciente2 = User::find($p2Id);
         $this->actingAs($paciente2);
 
         $payload2 = [
@@ -306,11 +353,11 @@ final class BookAppointmentTest extends TestCase
     public function test_gauntlet_rls_ataque_lectura_directa_paciente_ajeno(): void
     {
         $otroPaciente = User::factory()->create();
-        $otroPaciente->roles()->attach($this->patientRole);
+        DB::connection('pgsql_migration')->table('user_roles')->insert(['user_id' => $otroPaciente->id, 'role_id' => $this->patientRole->id]);
         
         $config = config('database.connections.pgsql');
         $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
-        $pdo = new \PDO($dsn, 'app_runtime', 'secure_runtime_pass');
+        $pdo = new \PDO($dsn, $config['username'], $config['password']);
         $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
         // Establecer el ID de usuario actual en PostgreSQL al del primer paciente
@@ -326,23 +373,33 @@ final class BookAppointmentTest extends TestCase
 
     public function test_gauntlet_rls_insercion_borrador_soap_legitima_y_bloqueo(): void
     {
-        $cita = Appointment::create([
-            'patient_id' => $this->patient->id,
-            'doctor_id' => $this->doctor->id,
-            'franja' => '[2026-08-10 09:00:00+00, 2026-08-10 09:30:00+00)',
-            'status' => 'confirmed'
+        // Fixture preexistente: cita confirmada + consulta (no es acción del test)
+        $citaId = Str::uuid()->toString();
+        $consultaId = Str::uuid()->toString();
+        $mc = DB::connection('pgsql_migration');
+
+        $mc->table('appointments')->insert([
+            'id'                       => $citaId,
+            'patient_id'               => $this->patient->id,
+            'doctor_id'                => $this->doctor->id,
+            'franja'                   => '[2026-08-10 09:00:00+00, 2026-08-10 09:30:00+00)',
+            'status'                   => 'confirmed',
+            'idempotency_key'          => Str::uuid()->toString(),
+            'idempotency_payload_hash' => hash('sha256', 'gauntlet-soap'),
+            'created_at'               => now(),
+            'updated_at'               => now(),
         ]);
 
-        $consulta = DB::table('consultations')->insertGetId([
-            'id' => Str::uuid(),
-            'appointment_id' => $cita->id,
-            'created_at' => now(),
-            'updated_at' => now()
+        $mc->table('consultations')->insert([
+            'id'             => $consultaId,
+            'appointment_id' => $citaId,
+            'created_at'     => now(),
+            'updated_at'     => now(),
         ]);
 
         $config = config('database.connections.pgsql');
         $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
-        $pdo = new \PDO($dsn, 'app_runtime', 'secure_runtime_pass');
+        $pdo = new \PDO($dsn, $config['username'], $config['password']);
         $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 
         // 1. Intentar insertar borrador SOAP como Médico Asignado (Éxito)
@@ -354,9 +411,14 @@ final class BookAppointmentTest extends TestCase
             INSERT INTO consultation_notes (id, consultation_id, symptoms, objective, analysis, plan, status)
             VALUES (?, ?, 'Sintomas', 'Objetivo', 'Analisis', 'Plan', 'draft')
         ");
-        $stmtInsert->execute([$notaUuid, $consulta]);
+        $stmtInsert->execute([$notaUuid, $consultaId]);
 
-        $this->assertDatabaseHas('consultation_notes', ['id' => $notaUuid, 'status' => 'draft']);
+        $insertedNote = DB::connection('pgsql_migration')
+            ->table('consultation_notes')
+            ->where('id', $notaUuid)
+            ->where('status', 'draft')
+            ->first();
+        $this->assertNotNull($insertedNote, 'El médico asignado debe poder insertar borrador SOAP');
 
         // 2. Intentar insertar borrador SOAP como Paciente (Fallo RLS)
         $pdo->exec("SET app.current_user_id = '{$this->patient->id}'");
@@ -364,7 +426,7 @@ final class BookAppointmentTest extends TestCase
 
         $notaUuid2 = Str::uuid()->toString();
         $this->expectException(\PDOException::class);
-        $stmtInsert->execute([$notaUuid2, $consulta]);
+        $stmtInsert->execute([$notaUuid2, $consultaId]);
     }
 
     /**
@@ -383,20 +445,20 @@ final class BookAppointmentTest extends TestCase
         // PHP-FPM desbloquea tras el commit de la primera y recibe 23P01.
 
         $paciente1 = User::factory()->create();
-        $paciente1->roles()->attach($this->patientRole);
+        DB::connection('pgsql_migration')->table('user_roles')->insert(['user_id' => $paciente1->id, 'role_id' => $this->patientRole->id]);
 
         $paciente2 = User::factory()->create();
-        $paciente2->roles()->attach($this->patientRole);
+        DB::connection('pgsql_migration')->table('user_roles')->insert(['user_id' => $paciente2->id, 'role_id' => $this->patientRole->id]);
 
         $config = config('database.connections.pgsql');
         $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
 
-        $pdoA = new \PDO($dsn, 'app_runtime', 'secure_runtime_pass');
+        $pdoA = new \PDO($dsn, $config['username'], $config['password']);
         $pdoA->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         $pdoA->exec("SET app.current_user_id = '{$paciente1->id}'");
         $pdoA->exec("SET app.current_user_role = 'patient'");
 
-        $pdoB = new \PDO($dsn, 'app_runtime', 'secure_runtime_pass');
+        $pdoB = new \PDO($dsn, $config['username'], $config['password']);
         $pdoB->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         $pdoB->exec("SET app.current_user_id = '{$paciente2->id}'");
         $pdoB->exec("SET app.current_user_role = 'patient'");
@@ -453,17 +515,17 @@ final class BookAppointmentTest extends TestCase
         // para un solo INSERT). Esperarlo es lo correcto.
 
         $paciente1 = User::factory()->create();
-        $paciente1->roles()->attach($this->patientRole);
+        DB::connection('pgsql_migration')->table('user_roles')->insert(['user_id' => $paciente1->id, 'role_id' => $this->patientRole->id]);
 
         $config = config('database.connections.pgsql');
         $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
 
-        $pdoA = new \PDO($dsn, 'app_runtime', 'secure_runtime_pass');
+        $pdoA = new \PDO($dsn, $config['username'], $config['password']);
         $pdoA->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         $pdoA->exec("SET app.current_user_id = '{$paciente1->id}'");
         $pdoA->exec("SET app.current_user_role = 'patient'");
 
-        $pdoB = new \PDO($dsn, 'app_runtime', 'secure_runtime_pass');
+        $pdoB = new \PDO($dsn, $config['username'], $config['password']);
         $pdoB->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
         $pdoB->exec("SET app.current_user_id = '{$paciente1->id}'");
         $pdoB->exec("SET app.current_user_role = 'patient'");

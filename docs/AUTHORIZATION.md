@@ -62,11 +62,11 @@ A continuación se detalla el mecanismo de protección, justificación de capas 
      ```php
      static::addGlobalScope('solo_firmadas', function (Builder $builder) {
          if (auth()->check() && auth()->user()->hasRole('patient')) {
-             $builder->where('status', 'firmada');
+             $builder->where('status', 'signed');
          }
      });
      ```
-  3. *Capa PostgreSQL (RLS):* La política de seguridad RLS en `consultation_notes` exige que la nota esté `firmada` para ser visible al rol de paciente.
+  3. *Capa PostgreSQL (RLS):* La política de seguridad RLS en `consultation_notes` exige que la nota esté `signed` (firmada) para ser visible al rol de paciente.
 * **Por qué esta combinación:** El Global Scope de Eloquent garantiza que cualquier consulta del desarrollador (ej: `$patient->notes`) excluya automáticamente los borradores de forma transparente para evitar errores visuales en el portal del paciente. El RLS actúa en la base de datos asegurando que no se pueda eludir la regla inyectando sentencias SQL alternativas.
 * **Escenario Gherkin de Verificación:**
   ```gherkin
@@ -153,7 +153,7 @@ Dado que PostgreSQL bloquea por defecto cualquier operación DML si RLS está ac
 
 ### Ejemplo de Divergencia en `consultation_notes` (Notas SOAP):
 * **`INSERT` (`WITH CHECK`):** Un médico que tiene una consulta activa puede insertar una nota en estado `draft` (borrador) con su UUID de autor. No existe fila previa (`USING` no aplica), pero el nuevo registro es validado.
-* **`SELECT` (`USING`):** El paciente puede leer la nota sólo si el estado de la fila es `firmada`. El médico puede leerla en estado `draft` o `firmada` siempre que sea el médico de la consulta.
+* **`SELECT` (`USING`):** El paciente puede leer la nota sólo si el estado de la fila es `signed` (firmada). El médico puede leerla en estado `draft` o `signed` siempre que sea el médico de la consulta.
 * **`UPDATE` (`USING` y `WITH CHECK`):** El médico puede actualizar la nota sólo si el registro existente en la base de datos tiene estado `draft` y él es el autor (`USING`), y los nuevos valores modificados deben seguir cumpliendo que él es el autor y no se intente forzar un cambio de firmante a otro usuario (`WITH CHECK`).
 
 ---

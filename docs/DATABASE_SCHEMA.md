@@ -211,6 +211,37 @@ CREATE TABLE appointments (
         WHERE (status <> 'cancelled')
 );
 
+-- 10b. Solicitudes de Reprogramación (tabla separada — el estado de la solicitud
+--      NO contamina el ciclo de vida de la cita.
+--      Solo paciente o agente solicitan; el médico aprueba o rechaza.
+--      El médico NO reprograma — cancela. El dinero vive en la cancelación.)
+CREATE TABLE reschedule_requests (
+    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    appointment_id   uuid NOT NULL REFERENCES appointments(id) ON DELETE RESTRICT,
+    requested_by     uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    resolved_by      uuid NULL REFERENCES users(id) ON DELETE RESTRICT,
+    doctor_id        uuid NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    requested_franja tstzrange NOT NULL,
+    reason           text NOT NULL,
+    status           varchar(20) NOT NULL DEFAULT 'pending',
+    resolved_at      timestamptz NULL,
+    created_at       timestamptz NOT NULL DEFAULT now(),
+    updated_at       timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT reschedule_status_valido CHECK (status IN ('pending', 'approved', 'rejected', 'expired')),
+
+    -- Proteger el SLOT PROPUESTO contra solapamiento con citas activas del mismo médico.
+    -- Sin esto, dos solicitudes podrían proponer el mismo slot y la segunda aprobación
+    -- colisionaría con la primera sin aviso previo.
+    CONSTRAINT reschedule_sin_solapamiento
+        EXCLUDE USING gist (doctor_id WITH =, requested_franja WITH &&)
+        WHERE (status = 'pending')
+);
+
+-- Solo una solicitud abierta por cita a la vez
+CREATE UNIQUE INDEX reschedule_una_pendiente_por_cita
+    ON reschedule_requests (appointment_id) WHERE (status = 'pending');
+
 -- 11. Pagos Citas (Stripe)
 CREATE TABLE payments (
     id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -297,7 +328,7 @@ CREATE TABLE consultation_notes (
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
 
-    CONSTRAINT notes_status_valido CHECK (status IN ('draft', 'firmada')),
+    CONSTRAINT notes_status_valido CHECK (status IN ('draft', 'signed')),
     CONSTRAINT notes_pdf_status_valido CHECK (pdf_status IN ('pdf_pendiente', 'pdf_ready', 'pdf_error'))
 );
 
@@ -390,6 +421,7 @@ CREATE TABLE audit_logs (
     record_id  uuid NOT NULL,
     action     varchar(10) NOT NULL,
     user_id    uuid NULL REFERENCES users(id) ON DELETE RESTRICT,
+    actor_pg   varchar(63) NOT NULL DEFAULT current_user,  -- rol de PostgreSQL (app_runtime, app_worker, app_owner)
     old_values jsonb NULL,
     new_values jsonb NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
@@ -801,7 +833,7 @@ CREATE POLICY consultation_notes_select ON consultation_notes
         )
         OR (
             current_setting('app.current_user_role', true) = 'patient'
-            AND status = 'firmada'
+            AND status = 'signed'
             AND EXISTS (
                 SELECT 1 FROM consultations c
                 JOIN appointments a ON a.id = c.appointment_id
@@ -837,7 +869,7 @@ CREATE POLICY consultation_notes_update ON consultation_notes
     WITH CHECK (
         (status = 'draft')
         OR (
-            status = 'firmada'
+            status = 'signed'
             AND signed_by = NULLIF(current_setting('app.current_user_id', true), '')::uuid
         )
     );
@@ -858,7 +890,7 @@ CREATE POLICY note_amendments_select ON note_amendments
             WHERE n.id = consultation_note_id
               AND (
                   (current_setting('app.current_user_role', true) = 'doctor' AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid)
-                  OR (current_setting('app.current_user_role', true) = 'patient' AND a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid AND n.status = 'firmada')
+                  OR (current_setting('app.current_user_role', true) = 'patient' AND a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid AND n.status = 'signed')
               )
         )
     );
@@ -872,7 +904,7 @@ CREATE POLICY note_amendments_insert ON note_amendments
             JOIN consultations c ON c.id = n.consultation_id
             JOIN appointments a ON a.id = c.appointment_id
             WHERE n.id = consultation_note_id
-              AND n.status = 'firmada'
+              AND n.status = 'signed'
               AND a.doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
         )
     );
@@ -948,5 +980,132 @@ CREATE POLICY vital_signs_insert ON vital_signs
               )
         )
     );
+
+-- ====================================================================
+-- CONCESIÓN DE PRIVILEGIOS PARA reschedule_requests
+-- ====================================================================
+GRANT SELECT, INSERT, UPDATE ON reschedule_requests TO app_runtime;
+GRANT SELECT, UPDATE ON reschedule_requests TO app_worker;
+
+-- ====================================================================
+-- ÍNDICES PARA reschedule_requests
+-- ====================================================================
+CREATE INDEX IF NOT EXISTS reschedule_requests_appointment_id_idx ON reschedule_requests (appointment_id);
+CREATE INDEX IF NOT EXISTS reschedule_requests_requested_by_idx ON reschedule_requests (requested_by);
+CREATE INDEX IF NOT EXISTS reschedule_requests_doctor_id_idx ON reschedule_requests (doctor_id);
+
+-- ====================================================================
+-- RLS PARA reschedule_requests
+-- ====================================================================
+ALTER TABLE reschedule_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY reschedule_requests_select ON reschedule_requests
+    FOR SELECT
+    USING (
+        current_user = 'app_worker'
+        OR current_setting('app.current_user_role', true) = 'admin'
+        OR current_setting('app.current_user_role', true) = 'agent'
+        OR requested_by = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        OR doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        OR EXISTS (
+            SELECT 1 FROM appointments a
+            WHERE a.id = reschedule_requests.appointment_id
+              AND a.patient_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        )
+    );
+
+CREATE POLICY reschedule_requests_insert ON reschedule_requests
+    FOR INSERT
+    WITH CHECK (
+        current_setting('app.current_user_role', true) = 'admin'
+        OR current_setting('app.current_user_role', true) = 'agent'
+        OR requested_by = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+    );
+
+CREATE POLICY reschedule_requests_update ON reschedule_requests
+    FOR UPDATE
+    USING (
+        current_user = 'app_worker'
+        OR doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        OR current_setting('app.current_user_role', true) = 'admin'
+    )
+    WITH CHECK (
+        current_user = 'app_worker'
+        OR doctor_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid
+        OR current_setting('app.current_user_role', true) = 'admin'
+    );
+
+
+-- ====================================================================
+-- FUNCIÓN DE AUDITORÍA CON TRIGGERS DE POSTGRESQL
+-- ====================================================================
+-- Intercepta toda escritura (INSERT/UPDATE/DELETE) sin importar el origen
+-- (Eloquent, SQL directo, worker, migraciones).
+--
+-- Actor: usa current_setting('app.current_user_id') cuando hay contexto HTTP.
+-- Cuando no hay contexto (worker, migraciones), registra current_user
+-- (el rol de PostgreSQL) como actor_pg para trazabilidad de sistema.
+-- ====================================================================
+
+CREATE OR REPLACE FUNCTION fn_audit_log() RETURNS TRIGGER AS $$
+DECLARE
+    v_user_id uuid;
+    v_actor_pg text;
+    v_record_id uuid;
+    v_old jsonb;
+    v_new jsonb;
+BEGIN
+    -- Obtener el actor HTTP si existe; NULL si no hay contexto (worker, seeders)
+    v_user_id := NULLIF(current_setting('app.current_user_id', true), '')::uuid;
+
+    -- Siempre registrar el rol de PostgreSQL como contexto de sistema
+    v_actor_pg := session_user;
+
+    IF TG_OP = 'INSERT' THEN
+        v_record_id := NEW.id;
+        v_old := NULL;
+        v_new := to_jsonb(NEW);
+    ELSIF TG_OP = 'UPDATE' THEN
+        -- Optimización: no registrar si la fila no cambió (ej: UPDATE SET updated_at = now())
+        IF to_jsonb(OLD) = to_jsonb(NEW) THEN
+            RETURN NEW;
+        END IF;
+        v_record_id := NEW.id;
+        v_old := to_jsonb(OLD);
+        v_new := to_jsonb(NEW);
+    ELSIF TG_OP = 'DELETE' THEN
+        v_record_id := OLD.id;
+        v_old := to_jsonb(OLD);
+        v_new := NULL;
+    END IF;
+
+    INSERT INTO audit_logs (table_name, record_id, action, user_id, actor_pg, old_values, new_values)
+    VALUES (TG_TABLE_NAME, v_record_id, TG_OP, v_user_id, v_actor_pg, v_old, v_new);
+
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Triggers individuales por tabla auditada
+CREATE TRIGGER trg_audit_appointments     AFTER INSERT OR UPDATE ON appointments       FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+CREATE TRIGGER trg_audit_consultation_notes AFTER INSERT OR UPDATE ON consultation_notes FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+CREATE TRIGGER trg_audit_note_amendments  AFTER INSERT ON note_amendments               FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+CREATE TRIGGER trg_audit_patient_profiles AFTER INSERT OR UPDATE ON patient_profiles     FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+CREATE TRIGGER trg_audit_patient_allergies AFTER INSERT OR UPDATE ON patient_allergies   FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+CREATE TRIGGER trg_audit_patient_conditions AFTER INSERT OR UPDATE ON patient_conditions FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+CREATE TRIGGER trg_audit_patient_medications AFTER INSERT OR UPDATE ON patient_medications FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+CREATE TRIGGER trg_audit_vital_signs      AFTER INSERT ON vital_signs                    FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+CREATE TRIGGER trg_audit_schedules        AFTER INSERT OR UPDATE OR DELETE ON schedules  FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+CREATE TRIGGER trg_audit_schedule_blocks  AFTER INSERT OR UPDATE OR DELETE ON schedule_blocks FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+CREATE TRIGGER trg_audit_reschedule_requests AFTER INSERT OR UPDATE ON reschedule_requests FOR EACH ROW EXECUTE FUNCTION fn_audit_log();
+
+-- ====================================================================
+-- ASERCIÓN: app_runtime NO puede desactivar triggers
+-- ====================================================================
+-- app_runtime no es dueño de las tablas (app_owner lo es) y no tiene
+-- SUPERUSER ni TRIGGER privilege. ALTER TABLE ... DISABLE TRIGGER
+-- requiere ser dueño de la tabla o superusuario. Un intento retorna:
+--   ERROR: must be owner of table appointments
+-- Esta restricción se verifica en la prueba AuditLogTest.
 ```
 

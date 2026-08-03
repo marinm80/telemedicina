@@ -380,11 +380,11 @@ Escenario: Médico firma la nota clínica
   Cuando el médico envía una petición POST a "/api/consultations/50/notes/sign"
   Entonces el servidor realiza la firma:
     1. Calcula el hash SHA-256 del contenido clínico (motivo, síntomas, hallazgos, evaluación, plan)
-    2. Guarda en "consultation_notes": status = "firmada", content_hash, signed_by = doctor_id, signed_at = tiempo actual, signed_ip, signed_user_agent
+    2. Guarda en "consultation_notes": status = "signed", content_hash, signed_by = doctor_id, signed_at = tiempo actual, signed_ip, signed_user_agent
   Y el servidor responde con código HTTP 200 OK.
 
 Escenario: Bloqueo de modificación directa en nota firmada
-  Dado que la nota clínica de la consulta 50 tiene status = "firmada"
+  Dado que la nota clínica de la consulta 50 tiene status = "signed"
   Cuando el médico intenta enviar una petición PUT para modificar el campo "symptoms" de esa nota
   Entonces el servidor responde con código HTTP 403 Forbidden o 422 Unprocessable Entity
   Y rechaza cualquier modificación.
@@ -393,7 +393,7 @@ Escenario: Bloqueo de modificación directa en nota firmada
 ### Criterio de aceptación — RF-17 (Enmiendas Clínicas)
 ```gherkin
 Escenario: Médico añade enmienda a una nota firmada
-  Dado que la nota de la consulta 50 está en estado "firmada"
+  Dado que la nota de la consulta 50 está en estado "signed"
   Cuando el médico de esa consulta envía una petición POST a "/api/consultations/50/notes/amendments" con:
     | reason  | "Olvidé detallar dosis de aspirina" |
     | content | "Se indica aspirina 100mg diarios"  |
@@ -478,7 +478,7 @@ Escenario: Bloqueo de mutación en tabla de logs de auditoría
 | BR-05 | Comisión única y fija de plataforma | Action de facturación (`CalculatePlatformCommission`) | La comisión fija es del 15% (configurable por variables del sistema) aplicada sobre el total cobrado al paciente en USD. El monto neto del médico permanece retenido hasta que la cita sea completada. |
 | BR-06 | Restricción de acceso a ficha clínica | Políticas de autorización de Laravel (Policies) | Un médico solo puede ver la ficha clínica longitudinal de un paciente si tiene una consulta agendada o registrada en el histórico con él. El acceso directo está prohibido. |
 | BR-07 | Privacidad absoluta de agentes administrativos | Middleware y políticas de rutas de Laravel | El rol de agente tiene prohibido por completo el acceso a las rutas `/api/consultations/*` y `/api/patients/*/clinical-file`. Cualquier intento arroja HTTP 403. |
-| BR-08 | Inmutabilidad de notas firmadas | Lógica en `SignConsultationNoteAction` | Una vez que el estado de la nota cambia a "firmada", se bloquean las peticiones UPDATE sobre ella. Solo se aceptan adiciones vía inserción en `note_amendments`. |
+| BR-08 | Inmutabilidad de notas firmadas | Lógica en `SignConsultationNoteAction` | Una vez que el estado de la nota cambia a "signed" (firmada), se bloquean las peticiones UPDATE sobre ella. Solo se aceptan adiciones vía inserción en `note_amendments`. |
 | BR-09 | Control de consulta única activa | Lógica en `CreateAppointmentAction` | El sistema impide que un paciente cree o tenga activa una nueva cita con el mismo médico si existe una consulta previa cuya nota clínica sigue en estado "draft" (borrador) y no ha sido formalmente firmada. |
 | BR-10 | Aprobación sujeta a especialidades | Lógica en `ApproveDoctorAction` | Un administrador no puede aprobar el perfil de un médico que no tenga registrado al menos una especialidad médica activa asociada en la tabla pivot `doctor_specialties`. |
 
