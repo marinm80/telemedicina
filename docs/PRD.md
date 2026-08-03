@@ -90,9 +90,9 @@ Esta plataforma resuelve la centralización geográfica de los especialistas mé
 | RF-05 | Gestión de Perfiles y Zonas Horarias | Configuración de especialidades por médico y almacenamiento de zona horaria por usuario. | Alta | Alta | PENDIENTE |
 | RF-06 | Ficha Clínica Longitudinal | Registro acumulativo de alergias (estructuradas), condiciones de salud y medicación. | Alta | MÁXIMO | PENDIENTE |
 | RF-07 | Directorio y Buscador de Médicos | Buscador de médicos aprobados y activos con filtrado por especialidad y slots. | Alta | Media | PENDIENTE |
-| RF-08 | Configuración de Agenda y Bloqueos | Definición de horarios recurrentes semanales y bloqueos de fechas por médico. | Alta | MÁXIMO | PENDIENTE |
-| RF-09 | Reserva de Citas sin Solapamiento | Reserva e inserción atómica de cita garantizando la exclusión de franja horaria coincidente. | Alta | MÁXIMO | PENDIENTE |
-| RF-10 | Reserva en Nombre del Paciente | Agente reserva un slot libre para un paciente, validando que el agente no acceda a datos clínicos. | Alta | MÁXIMO | PENDIENTE |
+| RF-08 | Configuración de Agenda y Bloqueos | Definición de horarios recurrentes semanales y bloqueos de fechas por médico. | Alta | MÁXIMO | PARCIAL |
+| RF-09 | Reserva de Citas sin Solapamiento | Reserva e inserción atómica de cita garantizando la exclusión de franja horaria coincidente. | Alta | MÁXIMO | CONSTRUIDO |
+| RF-10 | Reserva en Nombre del Paciente | Agente reserva un slot libre para un paciente, validando que el agente no acceda a datos clínicos. | Alta | MÁXIMO | PARCIAL |
 | RF-11 | Solicitud y Aprobación de Reprogramación | Flujo de reprogramación con confirmación del médico que reasigna el slot en una sola transacción. | Alta | MÁXIMO | PENDIENTE |
 | RF-12 | Pago con Stripe e Idempotencia | Cobro del slot con redirección y webhook de Stripe con protección contra reintentos. | Alta | MÁXIMO | PENDIENTE |
 | RF-13 | Cuestionario Pre-consulta | Captura del motivo e historial de síntomas del paciente previo a iniciar el chat. | Alta | Media | PENDIENTE |
@@ -102,7 +102,7 @@ Esta plataforma resuelve la centralización geográfica de los especialistas mé
 | RF-17 | Enmiendas Clínicas | Registro de anotaciones modificatorias anexadas a una nota firmada sin alterar el original. | Alta | MÁXIMO | PENDIENTE |
 | RF-18 | Generación de PDF y QR Clínico | Encolado en Horizon para materializar el PDF con DomPDF e incluir hash y código QR de validación. | Alta | MÁXIMO | PENDIENTE |
 | RF-19 | Acuse de Recibo de Paciente | Paciente firma conformidad del informe regenerando el PDF con hoja de constancia. | Media | Media | PENDIENTE |
-| RF-20 | Auditoría Inmutable de BD | Registro en base de datos de toda modificación en tablas clínicas, financieras y de agenda. | Alta | MÁXIMO | PENDIENTE |
+| RF-20 | Auditoría Inmutable de BD | Registro en base de datos de toda modificación en tablas clínicas, financieras y de agenda. | Alta | MÁXIMO | PARCIAL |
 
 ---
 

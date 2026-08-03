@@ -17,9 +17,9 @@ Para garantizar la seguridad de Row-Level Security (RLS) sin bloquear las tareas
 ### Sentencias SQL de Configuración de Roles (Ejecutadas por Superusuario)
 ```sql
 -- Crear los tres roles de conexión
-CREATE ROLE app_owner WITH LOGIN PASSWORD 'secure_owner_pass';
-CREATE ROLE app_runtime WITH LOGIN PASSWORD 'secure_runtime_pass';
-CREATE ROLE app_worker WITH LOGIN PASSWORD 'secure_worker_pass';
+CREATE ROLE app_owner WITH LOGIN PASSWORD '<ver .env>';
+CREATE ROLE app_runtime WITH LOGIN PASSWORD '<ver .env>';
+CREATE ROLE app_worker WITH LOGIN PASSWORD '<ver .env>';
 
 -- Otorgar privilegios de esquema al dueño
 GRANT ALL PRIVILEGES ON SCHEMA public TO app_owner;

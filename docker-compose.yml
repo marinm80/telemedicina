@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: telemedicina_postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+    ports:
+      - "5433:5432" # Mapeado al 5433 para evitar colisión con el Postgres local
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - telemedicina_net
+
+  redis:
+    image: redis:alpine
+    container_name: telemedicina_redis
+    ports:
+      - "6380:6379" # Mapeado al 6380 para evitar colisiones con Redis local
+    networks:
+      - telemedicina_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: telemedicina_backend
+    volumes:
+      - ./backend:/var/www/html
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=telemedicina
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=postgres_password
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - telemedicina_net
+
+networks:
+  telemedicina_net:
+    driver: bridge
+
+volumes:
+  pgdata:

@@ -1,0 +1,34 @@
+# Logs y caches
+*.log
+.DS_Store
+.phpunit.result.cache
+/.phpunit.cache
+Thumbs.db
+
+# VS Code / IDEs
+/.idea
+/.vscode
+/.cursor/
+/.zed
+
+# Backend specific (Laravel)
+/backend/.env
+/backend/.env.backup
+/backend/.env.production
+/backend/vendor/
+/backend/public/storage
+/backend/public/build/
+/backend/public/hot
+/backend/storage/*.key
+/backend/storage/pail/
+/backend/auth.json
+/backend/_ide_helper.php
+
+# Frontend specific (Vue)
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.env.local
+/frontend/.env.*.local
+
+# Temporal / scratch
+/scratch/

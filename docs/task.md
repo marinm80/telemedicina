@@ -1,0 +1,22 @@
+# Gate 3 — Entrega 1: Flujo de Reserva y Agenda (Backend)
+
+- [x] Reorganización de estructura de carpetas física:
+  - [x] Crear `/backend` y `/frontend`.
+  - [x] Mover Laravel completo a `/backend/`.
+  - [x] Crear proyecto Vue 3 + TS + Vite en `/frontend/`.
+- [x] Dockerizar entorno para saltar limitaciones de drivers en local (PostgreSQL 16, Redis y PHP 8.4).
+- [x] Creación de base de datos estructural inicial con migración robusta (roles `app_owner`, `app_runtime`, `app_worker`, tipos como `timerange`, privilegios DML DDL específicos y RLS configurado).
+- [x] Implementación de Endpoints Laravel:
+  - [x] `GET /api/doctors/{id}/availability` (cálculo dinámico de slots disponibles a través de Form Request `AvailabilityRequest`).
+  - [x] `POST /api/appointments` (flujo de reserva preventivo con validación e idempotencia atómica en base de datos).
+- [x] Implementación de seguridad y validación:
+  - [x] Form Request `BookAppointmentRequest` con duración de 30 minutos e idempotencia obligatoria.
+  - [x] Form Request `AvailabilityRequest` para unificación formal con los ejemplares.
+  - [x] Middleware `SetPostgresSessionContext` para inyectar variables de sesión PostgreSQL para RLS.
+  - [x] Policy `AppointmentPolicy` para validar que los pacientes sólo agenden citas para sí mismos.
+- [x] Suite de Pruebas de integración sobre PostgreSQL:
+  - [x] Pruebas de disponibilidad y validaciones de errores 403 y 404.
+  - [x] Pruebas de flujo de reserva e idempotencia (mismo payload e impactos de payload diferente).
+  - [x] Pruebas RLS del Gauntlet (No-superuser, Ataque de lectura y Escritura SOAP autorizada).
+  - [x] Prueba de concurrencia real de slots (dos transacciones PDO abiertas en paralelo sobre PostgreSQL bloqueando por exclusión GIST de solapamiento `23P01`).
+  - [x] Prueba de concurrencia de idempotencia real (dos inserciones concurrentes de clave única `23505` / `55P03` resolviendo la idempotencia de doble clic en DB).
