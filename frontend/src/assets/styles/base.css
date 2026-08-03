@@ -1,0 +1,137 @@
+/**
+ * ====================================================================
+ * Estilos base — Plataforma de Telemedicina
+ * AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
+ * ====================================================================
+ *
+ * Reset mínimo y estilos globales del documento.
+ * Importa tokens y tipografía: este es el único archivo que main.ts
+ * necesita importar para tener todo el sistema de diseño cargado.
+ */
+
+@import './tokens.css';
+@import './typography.css';
+
+/* === RESET MÍNIMO === */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* === DOCUMENTO === */
+
+html {
+  font-size: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: var(--font-regular);
+  line-height: var(--leading-normal);
+  color: var(--color-text-strong);
+  background-color: var(--color-surface-50);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === ENCABEZADOS === */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-tight);
+  color: var(--color-text-strong);
+}
+
+/* === ENLACES === */
+
+a {
+  color: var(--color-primary-700);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-primary-600);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* === IMÁGENES === */
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+/* === LISTAS === */
+
+ul, ol {
+  list-style: none;
+}
+
+/* === BOTONES — reset base, los estilos van en componentes === */
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  border: none;
+  background: none;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* === INPUTS — reset base === */
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* === SCROLLBAR PERSONALIZADA (navegadores Chromium) === */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface-100);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-200);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border);
+}
+
+/* === SELECCIÓN DE TEXTO === */
+
+::selection {
+  background-color: var(--color-primary-100);
+  color: var(--color-primary-900);
+}

@@ -6,20 +6,24 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
     },
   },
   build: {
-    outDir: path.resolve(__dirname, '../backend/public/build'),
+    outDir: path.resolve(import.meta.dirname, '../backend/public/build'),
     emptyOutDir: true,
     manifest: true,
     rollupOptions: {
-      input: path.resolve(__dirname, './src/main.ts'),
+      input: path.resolve(import.meta.dirname, './src/main.ts'),
     },
   },
   server: {
     port: 5173,
     strictPort: true,
     cors: true,
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
   }
 });
