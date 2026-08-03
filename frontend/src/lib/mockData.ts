@@ -178,3 +178,72 @@ export const STATUS_CONFIG: Record<string, { label: string; cssClass: string; ic
   cancelled: { label: 'Cancelada',   cssClass: 'status--cancelled', icon: 'pi-times-circle' },
   completed: { label: 'Completada',  cssClass: 'status--completed', icon: 'pi-check-square' },
 };
+
+// ---------------------------------------------------------------------------
+// Vista pública de especialistas (sin email, sin license_number)
+// ---------------------------------------------------------------------------
+
+import type { PublicDoctor } from '@/types/public.types';
+
+export const mockPublicDoctors: PublicDoctor[] = [
+  {
+    id: 'dr-001',
+    name: 'Ana',
+    last_name: 'García',
+    description: 'Cardióloga con enfoque en prevención cardiovascular y rehabilitación cardíaca. Experiencia en ecocardiografía y pruebas de esfuerzo.',
+    university: 'Universidad Nacional Autónoma de Honduras',
+    years_experience: 12,
+    consultation_fee: 45.00,
+    specialty: 'Cardiología',
+  },
+  {
+    id: 'dr-002',
+    name: 'Carlos',
+    last_name: 'Mendoza',
+    description: 'Dermatólogo especializado en dermatoscopia digital y tratamiento de lesiones cutáneas. Certificado en dermatología pediátrica.',
+    university: 'Universidad de Buenos Aires',
+    years_experience: 8,
+    consultation_fee: 40.00,
+    specialty: 'Dermatología',
+  },
+  {
+    id: 'dr-003',
+    name: 'María',
+    last_name: 'López',
+    description: 'Pediatra con subespecialidad en neonatología. Atención integral del recién nacido y seguimiento del desarrollo infantil.',
+    university: 'Universidad de Costa Rica',
+    years_experience: 15,
+    consultation_fee: 35.00,
+    specialty: 'Pediatría',
+  },
+  {
+    id: 'dr-004',
+    name: 'Roberto',
+    last_name: 'Hernández',
+    description: 'Neurólogo con experiencia en trastornos del movimiento y epilepsia. Investigador en neurociencias clínicas.',
+    university: 'Universidad de Chile',
+    years_experience: 20,
+    consultation_fee: 55.00,
+    specialty: 'Neurología',
+  },
+  {
+    id: 'dr-005',
+    name: 'Laura',
+    last_name: 'Ramírez',
+    description: 'Psiquiatra especializada en trastornos de ansiedad y depresión. Terapia cognitivo-conductual y farmacoterapia.',
+    university: 'Universidad de Guadalajara',
+    years_experience: 10,
+    consultation_fee: 50.00,
+    specialty: 'Psiquiatría',
+  },
+  {
+    id: 'dr-006',
+    name: 'Fernando',
+    last_name: 'Torres',
+    description: 'Médico internista con enfoque en enfermedades crónicas y medicina preventiva. Certificado en ecografía point-of-care.',
+    university: 'Universidad Central de Venezuela',
+    years_experience: 18,
+    consultation_fee: 42.00,
+    specialty: 'Medicina Interna',
+  },
+];
