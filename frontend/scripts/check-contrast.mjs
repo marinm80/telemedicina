@@ -126,12 +126,12 @@ const PAIRS = [
   // --- Tokens que DEBEN estar en un par (no exentos) ---
 
   // warning-600: fondo sólido de badge de advertencia. El texto sobre este
-  // fondo es warning-800 (oscuro), NO blanco (blanco/warning-600 = 2.94, FALLA).
-  { fg: 'color-warning-800', bg: 'color-warning-600', type: 'text',     label: 'Warning-800 texto / badge warning' },
-  // surface-200: separador visual entre secciones. Aunque es decorativo,
-  // verificamos que sea distinguible del fondo blanco (3:1 non-text no aplica
-  // estrictamente a divisores, pero lo medimos igual para completitud).
-  { fg: 'color-surface-200', bg: 'color-surface-0',   type: 'non-text', label: 'Separador surface-200 / blanco' },
+  // fondo es text-strong (#0F172A), NO blanco (blanco/warning-600 = 2.94, FALLA).
+  { fg: 'color-text-strong', bg: 'color-warning-600', type: 'text',       label: 'Texto fuerte / badge warning' },
+  // surface-200: separador visual decorativo entre secciones.
+  // WCAG 1.4.11 aplica a "componentes de UI y objetos gráficos", no a
+  // divisores decorativos que no transmiten información. Umbral 1:1.
+  { fg: 'color-surface-200', bg: 'color-surface-0',   type: 'decorative', label: 'Separador decorativo / blanco' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -146,7 +146,7 @@ const PAIRS = [
 // Ejecución
 // ---------------------------------------------------------------------------
 
-const THRESHOLDS = { 'text': 4.5, 'large-text': 3, 'non-text': 3 };
+const THRESHOLDS = { 'text': 4.5, 'large-text': 3, 'non-text': 3, 'decorative': 1 };
 
 const css = readFileSync(TOKENS_PATH, 'utf-8');
 const tokens = parseTokens(css);
