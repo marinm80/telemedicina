@@ -103,6 +103,9 @@ Esta plataforma resuelve la centralización geográfica de los especialistas mé
 | RF-18 | Generación de PDF y QR Clínico | Encolado en Horizon para materializar el PDF con DomPDF e incluir hash y código QR de validación. | Alta | MÁXIMO | PENDIENTE |
 | RF-19 | Acuse de Recibo de Paciente | Paciente firma conformidad del informe regenerando el PDF con hoja de constancia. | Media | Media | PENDIENTE |
 | RF-20 | Auditoría Inmutable de BD | Registro en base de datos de toda modificación en tablas clínicas, financieras y de agenda. | Alta | MÁXIMO | PARCIAL |
+| RF-23 | Asistente Informativo (Landing) | Asistente conversacional de lectura pura en landing pública (sin sesión, cero escrituras en BD). | Media | MÁXIMO | PENDIENTE |
+| RF-24 | Asistente Clínico (Dashboard) | Asistente conversacional en el portal del paciente (con sesión paciente, hereda RLS, bloqueado de notas SOAP). | Alta | MÁXIMO | PENDIENTE |
+| RF-25 | Cancelación de Citas y Reembolsos | Cancelación por médico (100% reembolso siempre) y paciente (reembolso condicional a 24h previas). | Alta | MÁXIMO | PENDIENTE |
 
 ---
 
@@ -291,6 +294,61 @@ Escenario: Agente tiene prohibido ver información clínica al gestionar citas
   Dado que un agente intenta realizar una petición GET a "/api/patients/14/clinical-file"
   Entonces el servidor debe responder con código HTTP 403 Forbidden
   Y el JSON de respuesta debe denegar explícitamente el acceso por falta de permisos.
+```
+
+### Criterio de aceptación — RF-23 (Asistente Informativo - Landing Pública)
+```gherkin
+Escenario: Visitante consulta información al asistente de la landing
+  Dado que un visitante no autenticado interactúa con el Asistente Informativo en la landing pública
+  Cuando realiza consultas sobre servicios, especialidades o médicos disponibles
+  Entonces el asistente responde en modo de lectura pura consultando la vista pública "v_doctor_directory"
+  Y el servidor rechaza categóricamente cualquier intento de inserción o modificación en la base de datos (0 escrituras)
+  Y guía al visitante a registrarse o iniciar sesión si manifiesta intención de reservar una cita.
+```
+
+### Criterio de aceptación — RF-24 (Asistente Clínico - Dashboard del Paciente)
+```gherkin
+Escenario: Paciente interactúa con el Asistente Clínico para registrar antecedentes
+  Dado que un paciente autenticado interactúa con el Asistente Clínico en su dashboard
+  Cuando el paciente dicta sus alergias, condiciones o formulario pre-consulta
+  Entonces el asistente ejecuta la inserción bajo el ID del paciente (app.current_user_id)
+  Y las políticas de RLS garantizan que solo se escriban registros pertenecientes a ese paciente
+  Y el atributo declarada_por se fija con el ID del paciente, quedando pendiente de confirmación médica (confirmada_por).
+
+Escenario: Asistente Clínico intenta escribir una nota médica SOAP (Bloqueado por RLS)
+  Dado que el Asistente Clínico opera bajo la sesión del paciente
+  Cuando intenta ejecutar una inserción en la tabla "consultation_notes"
+  Entonces PostgreSQL rechaza la transacción inmediatamente por violación de la política RLS "consultation_notes_insert"
+  Debido a que la creación de notas SOAP está strictly restringida al médico de la consulta.
+
+Escenario: Rechazo de interacción con Asistente Clínico durante consulta en curso (in_progress)
+  Dado que un paciente autenticado tiene una consulta médica activa en estado status = "in_progress"
+  Cuando el paciente o cliente envía una petición POST al endpoint del Asistente Clínico (RF-24)
+  Entonces el servidor backend responde con código HTTP 409 Conflict
+  Y el payload JSON contiene error_code = "ASSISTANT_DISABLED_DURING_CONSULTATION"
+  Y la interfaz del Asistente Clínico se mantiene totalmente ausente durante toda la consulta en vivo.
+```
+
+### Criterio de aceptación — RF-25 (Cancelación de Citas y Política de Reembolso)
+
+> [!IMPORTANT]
+> **Limitación de Verificación de RF-25:** La lógica de negocio y política de reembolsos (cálculo de 100% vs 0% e indicación de estado de refund) está totalmente implementada en las Actions de dominio y base de datos, pero la emisión del reembolso monetario end-to-end en pasarela no es verificable en vivo hasta la construcción de **RF-12 (Pago con Stripe e Idempotencia)**.
+```gherkin
+Escenario: Médico cancela cita confirmada (Reembolso 100% automático)
+  Dado que un médico cancela una cita en cualquier momento previo o posterior
+  Cuando se registra la cancelación con cancelled_by = "doctor"
+  Entonces el estado de la cita cambia a "cancelled"
+  Y el sistema emite el reembolso completo (100%) al paciente sin aplicar penalizaciones ni restricciones de ventana temporal.
+
+Escenario: Paciente cancela cita con más de 24 horas de antelación
+  Dado que un paciente cancela una cita con > 24 horas antes del horario de inicio (local_start)
+  Cuando se ejecuta la cancelación con cancelled_by = "patient"
+  Entonces la cita pasa a estado "cancelled" y se procesa el reembolso correspondiente al paciente.
+
+Escenario: Paciente cancela cita con menos de 24 horas de antelación
+  Dado que un paciente cancela una cita con < 24 horas antes del horario de inicio
+  Cuando se ejecuta la cancelación con cancelled_by = "patient"
+  Entonces la cita pasa a estado "cancelled" y NO se emite reembolso al paciente conforme a las políticas de cancelación.
 ```
 
 ### Criterio de aceptación — RF-11 (Solicitud y Aprobación de Reprogramación)

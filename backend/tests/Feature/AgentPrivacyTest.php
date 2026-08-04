@@ -40,22 +40,7 @@ final class AgentPrivacyTest extends TestCase
     {
         parent::setUp();
 
-        // Limpiar tablas con superusuario (administración, no operación de dominio)
         $mc = DB::connection('pgsql_migration');
-        $mc->table('audit_logs')->delete();
-        $mc->table('patient_allergies')->delete();
-        $mc->table('patient_conditions')->delete();
-        $mc->table('patient_medications')->delete();
-        $mc->table('consultation_notes')->delete();
-        $mc->table('consultations')->delete();
-        $mc->table('appointments')->delete();
-        $mc->table('schedules')->delete();
-        $mc->table('doctor_specialties')->delete();
-        $mc->table('doctor_profiles')->delete();
-        $mc->table('patient_profiles')->delete();
-        $mc->table('user_roles')->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->delete();
 
         // Roles (Fixture-1: pgsql_migration — roles table only grants SELECT to app_runtime)
         $this->patientRole = Role::where('name', 'patient')->first();
@@ -128,7 +113,6 @@ final class AgentPrivacyTest extends TestCase
             'day_of_week'       => 1,
             'franja'            => '[09:00:00, 12:00:00)',
             'slot_duration'     => 30,
-            'is_active'         => true,
             'created_at'        => now(),
             'updated_at'        => now(),
         ]);
@@ -150,22 +134,6 @@ final class AgentPrivacyTest extends TestCase
 
     protected function tearDown(): void
     {
-        $mc = DB::connection('pgsql_migration');
-        $mc->table('audit_logs')->delete();
-        $mc->table('patient_allergies')->delete();
-        $mc->table('patient_conditions')->delete();
-        $mc->table('patient_medications')->delete();
-        $mc->table('consultation_notes')->delete();
-        $mc->table('consultations')->delete();
-        $mc->table('appointments')->delete();
-        $mc->table('schedules')->delete();
-        $mc->table('doctor_specialties')->delete();
-        $mc->table('doctor_profiles')->delete();
-        $mc->table('patient_profiles')->delete();
-        $mc->table('user_roles')->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->delete();
-
         // Limpiar contexto RLS de la conexión default
         DB::connection('pgsql')->statement("SELECT set_config('app.current_user_id', '', false)");
         DB::connection('pgsql')->statement("SELECT set_config('app.current_user_role', '', false)");

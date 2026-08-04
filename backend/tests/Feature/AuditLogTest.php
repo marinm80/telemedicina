@@ -39,20 +39,7 @@ final class AuditLogTest extends TestCase
 
         Cache::flush();
 
-        // Limpiar tablas manualmente (superusuario, sin RLS)
         $mc = DB::connection('pgsql_migration');
-        $mc->table('audit_logs')->delete();
-        $mc->table('note_amendments')->delete();
-        $mc->table('consultation_notes')->delete();
-        $mc->table('consultations')->delete();
-        $mc->table('appointments')->delete();
-        $mc->table('schedules')->delete();
-        $mc->table('doctor_specialties')->delete();
-        $mc->table('doctor_profiles')->delete();
-        $mc->table('patient_profiles')->delete();
-        $mc->table('user_roles')->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->delete();
 
         // Roles — roles table only has SELECT for app_runtime, use $mc for INSERT
         $this->patientRole = Role::where('name', 'patient')->first();
@@ -96,7 +83,6 @@ final class AuditLogTest extends TestCase
             'day_of_week' => 1,
             'franja' => '[09:00:00, 12:00:00)',
             'slot_duration' => 30,
-            'is_active' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -108,20 +94,6 @@ final class AuditLogTest extends TestCase
 
     protected function tearDown(): void
     {
-        $mc = DB::connection('pgsql_migration');
-        $mc->table('audit_logs')->delete();
-        $mc->table('note_amendments')->delete();
-        $mc->table('consultation_notes')->delete();
-        $mc->table('consultations')->delete();
-        $mc->table('appointments')->delete();
-        $mc->table('schedules')->delete();
-        $mc->table('doctor_specialties')->delete();
-        $mc->table('doctor_profiles')->delete();
-        $mc->table('patient_profiles')->delete();
-        $mc->table('user_roles')->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->delete();
-
         parent::tearDown();
     }
 

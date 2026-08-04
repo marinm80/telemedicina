@@ -8,7 +8,7 @@
 
     <!-- Integración Monorrepo Vite (Vite en /frontend, Laravel en /backend) -->
     @if (app()->environment('local') && !app()->runningUnitTests())
-        <script type="module" src="http://localhost:5173/@vite/client"></script>
+        <script type="module" src="http://localhost:5173/@@vite/client"></script>
         <script type="module" src="http://localhost:5173/src/main.ts"></script>
     @else
         @vite(['src/main.ts'], 'build')

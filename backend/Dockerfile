@@ -9,7 +9,11 @@ RUN apk add --no-cache \
     git \
     bash
 
-# Instalar extensiones de PHP pdo_pgsql, zip y bcmath
+# Instalar extensiones de PHP pdo_pgsql, zip, bcmath y redis
+RUN apk add --no-cache --virtual .phpredis-deps $PHPIZE_DEPS \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del .phpredis-deps
 RUN docker-php-ext-install pdo pdo_pgsql zip bcmath
 
 # Instalar Composer

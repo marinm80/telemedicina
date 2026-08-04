@@ -33,32 +33,21 @@ final class BookAppointmentTest extends TestCase
         // Limpiar caché de idempotencia antes de cada test
         Cache::flush();
 
-        // Limpiar tablas manualmente para evitar contaminación entre pruebas sin ocultar datos a PDO concurrentes
         $migrationConn = DB::connection('pgsql_migration');
-        $migrationConn->table('audit_logs')->delete();
-        $migrationConn->table('note_amendments')->delete();
-        $migrationConn->table('consultation_notes')->delete();
-        $migrationConn->table('consultations')->delete();
-        $migrationConn->table('appointments')->delete();
-        $migrationConn->table('schedules')->delete();
-        $migrationConn->table('doctor_specialties')->delete();
-        $migrationConn->table('doctor_profiles')->delete();
-        $migrationConn->table('patient_profiles')->delete();
-        $migrationConn->table('user_roles')->delete();
-        $migrationConn->table('audit_logs')->delete(); // triggers from deletes above may re-insert
-        $migrationConn->table('users')->delete();
 
         // 1. Inicializar roles via pgsql_migration (roles table only has SELECT for app_runtime)
-        $this->patientRole = Role::where('name', 'patient')->first();
-        if (!$this->patientRole) {
-            $migrationConn->table('roles')->insert(['id' => Str::uuid()->toString(), 'name' => 'patient', 'description' => 'Paciente', 'created_at' => now(), 'updated_at' => now()]);
-            $this->patientRole = Role::where('name', 'patient')->first();
+        $pRole = $migrationConn->table('roles')->where('name', 'patient')->first();
+        if (!$pRole) {
+            $pId = Str::uuid()->toString();
+            $migrationConn->table('roles')->insert(['id' => $pId, 'name' => 'patient', 'description' => 'Paciente', 'created_at' => now(), 'updated_at' => now()]);
         }
-        $this->doctorRole = Role::where('name', 'doctor')->first();
-        if (!$this->doctorRole) {
-            $migrationConn->table('roles')->insert(['id' => Str::uuid()->toString(), 'name' => 'doctor', 'description' => 'Médico', 'created_at' => now(), 'updated_at' => now()]);
-            $this->doctorRole = Role::where('name', 'doctor')->first();
+        $dRole = $migrationConn->table('roles')->where('name', 'doctor')->first();
+        if (!$dRole) {
+            $dId = Str::uuid()->toString();
+            $migrationConn->table('roles')->insert(['id' => $dId, 'name' => 'doctor', 'description' => 'Médico', 'created_at' => now(), 'updated_at' => now()]);
         }
+        $this->patientRole = Role::where('name', 'patient')->firstOrFail();
+        $this->doctorRole = Role::where('name', 'doctor')->firstOrFail();
 
         // 2. Crear usuarios de prueba (users INSERT policy allows when no context is set)
         $this->patient = User::factory()->create();
@@ -91,7 +80,6 @@ final class BookAppointmentTest extends TestCase
             'day_of_week' => 1,
             'franja' => '[09:00:00, 12:00:00)',
             'slot_duration' => 30,
-            'is_active' => true,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -99,21 +87,6 @@ final class BookAppointmentTest extends TestCase
 
     protected function tearDown(): void
     {
-        // Limpiar todas las tablas después de los tests
-        $migrationConn = DB::connection('pgsql_migration');
-        $migrationConn->table('audit_logs')->delete();
-        $migrationConn->table('note_amendments')->delete();
-        $migrationConn->table('consultation_notes')->delete();
-        $migrationConn->table('consultations')->delete();
-        $migrationConn->table('appointments')->delete();
-        $migrationConn->table('schedules')->delete();
-        $migrationConn->table('doctor_specialties')->delete();
-        $migrationConn->table('doctor_profiles')->delete();
-        $migrationConn->table('patient_profiles')->delete();
-        $migrationConn->table('user_roles')->delete();
-        $migrationConn->table('audit_logs')->delete();
-        $migrationConn->table('users')->delete();
-
         parent::tearDown();
     }
 
@@ -143,6 +116,252 @@ final class BookAppointmentTest extends TestCase
         $slots = $response->json('slots');
         $this->assertCount(6, $slots); // De 9:00 a 12:00 hay 6 slots de 30 mins
         $this->assertTrue($slots[0]['available']);
+    }
+
+    /**
+     * BUG DST: La hora de pared de schedules.franja se interpreta como UTC.
+     * Para un médico en America/Mexico_City, 09:00–12:00 debe generar el
+     * primer slot a las 15:00Z (UTC-6), no a las 09:00Z.
+     *
+     * 2026-08-10 es lunes. America/Mexico_City es CST (UTC-6) todo el año
+     * desde que México abolió el DST en 2022: 09:00 pared = 15:00Z.
+     */
+    public function test_dst_slots_respetan_timezone_del_medico(): void
+    {
+        // Re-crear médico con timezone America/Mexico_City
+        $mc = DB::connection('pgsql_migration');
+        $mc->unprepared(self::TRUNCATE_SQL ?? '');
+
+        // Insertar roles si no existen (TRUNCATE no toca roles)
+        $patientRole = Role::where('name', 'patient')->first();
+        $doctorRole = Role::where('name', 'doctor')->first();
+
+        // Paciente
+        $patient = User::factory()->create();
+        $mc->table('user_roles')->insert([
+            'user_id' => $patient->id,
+            'role_id' => $patientRole->id,
+        ]);
+
+        // Médico con timezone explícita
+        $doctor = User::factory()->create([
+            'timezone' => 'America/Mexico_City',
+        ]);
+        $mc->table('user_roles')->insert([
+            'user_id' => $doctor->id,
+            'role_id' => $doctorRole->id,
+        ]);
+
+        $dpId = Str::uuid()->toString();
+        $mc->table('doctor_profiles')->insert([
+            'id' => $dpId,
+            'user_id' => $doctor->id,
+            'license_number' => 'DST-001',
+            'university' => 'UNAM',
+            'description' => 'Test DST',
+            'consultation_fee' => 50.00,
+            'status' => 'approved',
+            'approved_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Horario: lunes 09:00–12:00 (hora de pared)
+        $mc->table('schedules')->insert([
+            'id' => Str::uuid()->toString(),
+            'doctor_profile_id' => $dpId,
+            'day_of_week' => 1,
+            'franja' => '[09:00:00, 12:00:00)',
+            'slot_duration' => 30,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($patient);
+
+        // 2026-08-10 es lunes, America/Mexico_City en CST (UTC-6)
+        $response = $this->getJson("/api/doctors/{$doctor->id}/availability?date=2026-08-10");
+        $response->assertStatus(200);
+
+        $slots = $response->json('slots');
+        $this->assertCount(6, $slots, 'Deben ser 6 slots de 30 min entre 09:00 y 12:00');
+
+        // 09:00 CST = 15:00 UTC (NO 09:00 UTC que es el bug)
+        $firstStart = $slots[0]['start'];
+        $this->assertStringContainsString(
+            '2026-08-10T15:00:00',
+            $firstStart,
+            "El primer slot debe ser 15:00Z (09:00 CST). Actual: {$firstStart}"
+        );
+
+        // Último slot: 11:30 CST = 17:30 UTC
+        $lastStart = $slots[5]['start'];
+        $this->assertStringContainsString(
+            '2026-08-10T17:30:00',
+            $lastStart,
+            "El último slot debe ser 17:30Z (11:30 CST). Actual: {$lastStart}"
+        );
+    }
+
+    /**
+     * DST Spring Forward: 2026-03-08, America/Chicago.
+     * A las 02:00 CST el reloj salta a 03:00 CDT.
+     * Un horario 01:00–04:00 con slots de 30 min normalmente da 6 slots.
+     * Los slots de 02:00 y 02:30 (hora de pared) no existen ese día.
+     * Resultado: 4 slots, no 6. Todos estrictamente crecientes en UTC.
+     */
+    public function test_dst_spring_forward_menos_slots(): void
+    {
+        $mc = DB::connection('pgsql_migration');
+        $mc->unprepared(self::TRUNCATE_SQL ?? '');
+
+        $patientRole = Role::where('name', 'patient')->first();
+        $doctorRole = Role::where('name', 'doctor')->first();
+
+        $patient = User::factory()->create();
+        $mc->table('user_roles')->insert([
+            'user_id' => $patient->id,
+            'role_id' => $patientRole->id,
+        ]);
+
+        // Doctor en America/Chicago — DST spring forward 2026-03-08
+        $doctor = User::factory()->create([
+            'timezone' => 'America/Chicago',
+        ]);
+        $mc->table('user_roles')->insert([
+            'user_id' => $doctor->id,
+            'role_id' => $doctorRole->id,
+        ]);
+
+        $dpId = Str::uuid()->toString();
+        $mc->table('doctor_profiles')->insert([
+            'id' => $dpId,
+            'user_id' => $doctor->id,
+            'license_number' => 'DST-FWD',
+            'university' => 'UChicago',
+            'description' => 'Test spring forward',
+            'consultation_fee' => 50.00,
+            'status' => 'approved',
+            'approved_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Horario: domingo 01:00–04:00 (cruza el salto 02:00→03:00)
+        // 2026-03-08 es domingo (dayOfWeek = 0)
+        $mc->table('schedules')->insert([
+            'id' => Str::uuid()->toString(),
+            'doctor_profile_id' => $dpId,
+            'day_of_week' => 0, // Domingo
+            'franja' => '[01:00:00, 04:00:00)',
+            'slot_duration' => 30,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($patient);
+
+        $response = $this->getJson("/api/doctors/{$doctor->id}/availability?date=2026-03-08");
+        $response->assertStatus(200);
+
+        $slots = $response->json('slots');
+
+        // 01:00 CST, 01:30 CST existen (UTC-6 → 07:00Z, 07:30Z)
+        // 02:00 CST NO existe (salta a 03:00 CDT)
+        // 02:30 CST NO existe
+        // 03:00 CDT, 03:30 CDT existen (UTC-5 → 08:00Z, 08:30Z)
+        // Total: 4 slots, no 6
+        $this->assertCount(4, $slots,
+            'Spring forward: 02:00 y 02:30 no existen, deben faltar 2 slots');
+
+        // Todos los instantes UTC deben ser estrictamente crecientes
+        $utcStarts = array_map(fn($s) => $s['start'], $slots);
+        for ($i = 1; $i < count($utcStarts); $i++) {
+            $this->assertGreaterThan($utcStarts[$i - 1], $utcStarts[$i],
+                "Los slots UTC deben ser estrictamente crecientes. Slot {$i}: {$utcStarts[$i]} <= {$utcStarts[$i-1]}");
+        }
+    }
+
+    /**
+     * DST Fall Back: 2026-11-01, America/Chicago.
+     * A las 02:00 CDT el reloj retrocede a 01:00 CST.
+     * Un horario 00:30–03:00 con slots de 30 min normalmente da 5 slots.
+     * La hora 01:00 y 01:30 ocurren dos veces. Se muestra la PRIMERA
+     * ocurrencia. Sin duplicados.
+     * Resultado: 5 slots (no 7), todos estrictamente crecientes en UTC.
+     */
+    public function test_dst_fall_back_sin_duplicados(): void
+    {
+        $mc = DB::connection('pgsql_migration');
+        $mc->unprepared(self::TRUNCATE_SQL ?? '');
+
+        $patientRole = Role::where('name', 'patient')->first();
+        $doctorRole = Role::where('name', 'doctor')->first();
+
+        $patient = User::factory()->create();
+        $mc->table('user_roles')->insert([
+            'user_id' => $patient->id,
+            'role_id' => $patientRole->id,
+        ]);
+
+        // Doctor en America/Chicago — DST fall back 2026-11-01
+        $doctor = User::factory()->create([
+            'timezone' => 'America/Chicago',
+        ]);
+        $mc->table('user_roles')->insert([
+            'user_id' => $doctor->id,
+            'role_id' => $doctorRole->id,
+        ]);
+
+        $dpId = Str::uuid()->toString();
+        $mc->table('doctor_profiles')->insert([
+            'id' => $dpId,
+            'user_id' => $doctor->id,
+            'license_number' => 'DST-BACK',
+            'university' => 'UChicago',
+            'description' => 'Test fall back',
+            'consultation_fee' => 50.00,
+            'status' => 'approved',
+            'approved_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Horario: domingo 00:30–03:00 (cruza el retroceso 02:00→01:00)
+        // 2026-11-01 es domingo (dayOfWeek = 0)
+        $mc->table('schedules')->insert([
+            'id' => Str::uuid()->toString(),
+            'doctor_profile_id' => $dpId,
+            'day_of_week' => 0, // Domingo
+            'franja' => '[00:30:00, 03:00:00)',
+            'slot_duration' => 30,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($patient);
+
+        $response = $this->getJson("/api/doctors/{$doctor->id}/availability?date=2026-11-01");
+        $response->assertStatus(200);
+
+        $slots = $response->json('slots');
+
+        // 00:30, 01:00, 01:30, 02:00, 02:30 → 5 slots nominales
+        // La hora 01:00-02:00 ocurre dos veces (CDT y CST),
+        // pero mostramos solo la primera ocurrencia.
+        $this->assertCount(5, $slots,
+            'Fall back: sin slots duplicados por hora ambigua');
+
+        // Todos los instantes UTC deben ser estrictamente crecientes
+        $utcStarts = array_map(fn($s) => $s['start'], $slots);
+        $uniqueStarts = array_unique($utcStarts);
+        $this->assertCount(count($utcStarts), $uniqueStarts,
+            'No debe haber instantes UTC duplicados');
+
+        for ($i = 1; $i < count($utcStarts); $i++) {
+            $this->assertGreaterThan($utcStarts[$i - 1], $utcStarts[$i],
+                "Los slots UTC deben ser estrictamente crecientes. Slot {$i}: {$utcStarts[$i]} <= {$utcStarts[$i-1]}");
+        }
     }
 
     public function test_consultar_disponibilidad_doctor_no_aprobado_lanza_404(): void
@@ -591,5 +810,74 @@ final class BookAppointmentTest extends TestCase
             ->count();
         $this->assertEquals(1, $count, 'Debe existir exactamente una cita para la clave de idempotencia.');
     }
+
+    /**
+     * Test de concurrencia real entre reserva de cita y bloqueo de agenda del médico.
+     * Dos conexiones PDO independientes: una reserva y un bloqueo compitiendo por la misma franja.
+     * El bloqueo debe ser rechazado por la base de datos con código 23P01.
+     */
+    public function test_concurrencia_reserva_y_bloqueo_agenda_competencia_por_base(): void
+    {
+        $paciente = User::factory()->create();
+        DB::connection('pgsql_migration')->table('user_roles')->insert(['user_id' => $paciente->id, 'role_id' => $this->patientRole->id]);
+        DB::connection('pgsql_migration')->table('users')->where('id', $this->doctor->id)->update(['timezone' => 'UTC']);
+
+        $config = config('database.connections.pgsql');
+        $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
+
+        // Conexión PDO A: Paciente reservando cita
+        $pdoA = new \PDO($dsn, $config['username'], $config['password']);
+        $pdoA->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        $pdoA->exec("SET app.current_user_id = '{$paciente->id}'");
+        $pdoA->exec("SET app.current_user_role = 'patient'");
+
+        // Conexión PDO B: Médico intentando bloquear el mismo horario
+        $pdoB = new \PDO($dsn, $config['username'], $config['password']);
+        $pdoB->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+        $pdoB->exec("SET app.current_user_id = '{$this->doctor->id}'");
+        $pdoB->exec("SET app.current_user_role = 'doctor'");
+
+        $appointmentId = Str::uuid()->toString();
+        $franjaCita = '[2026-08-10 14:00:00+00, 2026-08-10 14:30:00+00)';
+
+        // 1. Paciente A inserta y confirma cita
+        $insertAppointmentSql = "
+            INSERT INTO appointments (id, patient_id, doctor_id, franja, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?::tstzrange, 'confirmed', NOW(), NOW())
+        ";
+        $pdoA->exec("BEGIN");
+        $stmtA = $pdoA->prepare($insertAppointmentSql);
+        $stmtA->execute([$appointmentId, $paciente->id, $this->doctor->id, $franjaCita]);
+        $pdoA->exec("COMMIT");
+
+        // 2. Médico B intenta insertar un bloqueo en schedule_blocks para la misma franja
+        $doctorProfile = DB::connection('pgsql_migration')
+            ->table('doctor_profiles')
+            ->where('user_id', $this->doctor->id)
+            ->first();
+
+        $blockId = Str::uuid()->toString();
+        $insertBlockSql = "
+            INSERT INTO schedule_blocks (id, doctor_profile_id, blocked_date, franja, reason, created_at, updated_at)
+            VALUES (?, ?, '2026-08-10', '[14:00:00, 15:00:00)'::timerange, 'Capacitación', NOW(), NOW())
+        ";
+
+        $excepcionB = null;
+        $pdoB->exec("BEGIN");
+        try {
+            $stmtB = $pdoB->prepare($insertBlockSql);
+            $stmtB->execute([$blockId, $doctorProfile->id]);
+            $pdoB->exec("COMMIT");
+        } catch (\PDOException $e) {
+            $excepcionB = $e;
+            try { $pdoB->exec("ROLLBACK"); } catch (\Exception $err) {}
+        }
+
+        // 3. B debe fallar por el trigger de base de datos con código P0002
+        $this->assertNotNull($excepcionB, 'El bloqueo debió ser rechazado por existir cita confirmada.');
+        $this->assertEquals('P0002', $excepcionB->getCode(),
+            'El código de error del trigger debe ser P0002 (regla de negocio de bloqueo sobre cita activa).');
+    }
 }
+
 

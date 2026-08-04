@@ -23,11 +23,9 @@ final class Schedule extends Model
         'day_of_week',
         'franja',
         'slot_duration',
-        'is_active'
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
         'day_of_week' => 'integer',
         'slot_duration' => 'integer'
     ];

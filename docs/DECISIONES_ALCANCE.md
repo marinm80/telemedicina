@@ -202,3 +202,95 @@ Los pasos **5**, **12** y **17** son los tres momentos que demuestran competenci
 4. Comisión de la plataforma: ¿se mantiene el 15% del PRD v1?
 5. Ventana de cancelación gratuita: ¿se mantienen las 24 h del PRD v1?
 6. Texto del consentimiento informado para teleconsulta, y si se versiona
+
+---
+
+## 11. RF-08 — Decisiones de agenda del médico (cerradas 2026-08-03)
+
+### 11.1 Zona horaria en horarios recurrentes
+
+`schedules.franja` es `timerange` (hora de pared). `users.timezone` es la zona IANA.
+
+- **Sin desplazamiento ni 'Z'.** Rechazo 422. Una hora de pared con desplazamiento es una contradicción; se cierra en la frontera, no se interpreta. Formato: `HH:MM` o `HH:MM:SS`.
+- **Hora inexistente (DST primavera):** el slot se omite. No se corre el bloque hacia adelante: correrlo genera slots a horas que el médico no autorizó.
+- **Hora duplicada (DST otoño):** primera ocurrencia gana. Dos slots mostrando "01:30" son indistinguibles para el paciente. El médico pierde una hora dos veces al año.
+- **Cambio de timezone con citas futuras: PROHIBIDO (409).** Trigger `BEFORE UPDATE ON users`. Sin trigger es verificar-y-después-escribir. Recalcular está descartado: mover la cita de un paciente sin su consentimiento. El remedio del médico es cancelar con reembolso completo.
+
+### 11.2 schedules.is_active eliminada
+
+Se queda solo `deleted_at`. Motivos:
+1. Dos mecanismos para "apagado" divergen.
+2. `deleted_at` preserva la fila para auditoría y el EXCLUDE ya lo maneja.
+3. La pausa temporal se hace con `schedule_blocks`, que existe para eso.
+
+### 11.3 schedule_blocks: sin EXCLUDE, sin deleted_at, con UNIQUE
+
+- **Sin EXCLUDE:** un bloqueo RESTA disponibilidad. Restar dos veces da lo mismo.
+- **Sin deleted_at:** borrado físico. Un bloqueo es dato OPERATIVO, no hecho clínico. El trigger `trg_audit_schedule_blocks` (AFTER DELETE) graba el DELETE con `old_values` en `audit_logs`.
+- **UNIQUE (doctor_profile_id, blocked_date, franja):** idempotencia gratis. Un reintento choca con 23505 y se traduce a 204.
+
+### 11.4 Política de borrado por tabla
+
+| Tabla | Mecanismo | Motivo |
+|---|---|---|
+| `schedules` | Soft delete (`deleted_at`) | El EXCLUDE necesita `WHERE (deleted_at IS NULL)` para liberar el rango |
+| `appointments` | Soft delete (`deleted_at`) | FK `rescheduled_from` apunta a citas anteriores |
+| `users` | Soft delete (`deleted_at`) | FK desde múltiples tablas |
+| `schedule_blocks` | Borrado físico | Sin EXCLUDE, sin FK entrante. Dato operativo con trigger de auditoría |
+| `audit_logs` | Inmutable | No se borra nunca |
+
+### 11.5 Bug confirmado: GetDoctorAvailabilityAction líneas 83-84 y 99-100
+
+La conversión `hora_pared + fecha → instante` trata la hora de pared como UTC (`Carbon::parse($date . ' ' . $time, 'UTC')`), ignorando `users.timezone`. Corrección: `(fecha + lower(franja)) AT TIME ZONE zona` en SQL. Los instantes resultantes deben ser strictly crecientes; descartar duplicados implementa DST sin lógica a mano.
+
+---
+
+## 12. Clarificación de Agentes y Asistentes Conversacionales (cerradas 2026-08-03)
+
+### 12.1 Distinción estricta de términos y funciones
+Se definen y diferencian tres subsistemas distintos para evitar ambigüedades arquitectónicas y de seguridad:
+
+| Término | Entorno | Sesión | Rol de Sistema | Permisos y Capacidades |
+|---|---|---|---|---|
+| **Recepcionista** | Dashboard | Autenticada | `agent` | **Rol humano (RF-10, ya construido).** Puede pre-registrar pacientes, enviar invitaciones y agendar/reprogramar citas. **Bloqueo absoluto RLS a datos clínicos (403).** |
+| **Asistente Informativo** | Landing pública | Sin sesión | Sin rol (Guest) | **Lectura pura (Read-Only). SIN ESCRITURA EN BASE DE DATOS.** Explica servicios/políticas, guía al registro/login y lee del directorio público (`v_doctor_directory` con `security_barrier`). Exige iniciar sesión para agendar. |
+| **Asistente Clínico** | Dashboard | Autenticada | Mismo del paciente (`patient`) | **Asistente en el portal del paciente.** Actúa CON la sesión y el `app.current_user_id` del paciente autenticado. **NUNCA usa el rol `agent`** (preservando el límite de privacidad). |
+
+> **Cancelación de alcance previo:** Se eliminan formalmente del alcance `verification_expires_at`, las reservas temporales de 20 minutos, las transiciones CAS para expiración, el reintento perezoso sobre error `23P01`, la limpieza en Horizon y la creación de cuentas sin sesión por parte del asistente. Al ser el Asistente Informativo un componente de **lectura pura**, no existen escrituras temporales que proteger ni limpiar.
+
+### 12.2 Asistente Informativo (Landing Pública)
+- **Cero escrituras:** Si intenta escribir en cualquier tabla, constituye un defecto de diseño y no un permiso faltante.
+- **Acceso a directorio:** Consulta `v_doctor_directory` (vista pública con `security_barrier` que filtra médicos aprobados y oculta datos personales como licencias o correos).
+- **Interacción:** Responde preguntas sobre especialidades, horarios generales y políticas de la clínica. Guía al usuario a registrarse o iniciar sesión.
+
+### 12.3 Asistente Clínico (Dashboard del Paciente)
+- **Identidad RLS:** Operando bajo la sesión del paciente, PostgreSQL asigna `app.current_user_id = '<patient_uuid>'` y `app.current_user_role = 'patient'`.
+- **Verificación de Políticas RLS Existentes:**
+  - `patient_allergies_insert`: Permite al paciente insertar registros donde `p.user_id = current_user_id`.
+  - `patient_conditions_insert`: Permite al paciente insertar registros donde `p.user_id = current_user_id`.
+  - `pre_consultation_forms_insert`: Permite al paciente insertar su formulario donde `a.patient_id = current_user_id`.
+  - `vital_signs_insert`: Permite al paciente registrar signos vitales donde `a.patient_id = current_user_id`.
+  - **Resultado:** El Asistente Clínico hereda estas reglas exactas sin necesidad de agregar una sola política RLS nueva ni conceder privilegios adicionales.
+- **Límite Duro Inquebrantable:** `consultation_notes_insert` exige `status = 'draft'` y `a.doctor_id = current_user_id`. El asistente (actuando como paciente) tiene un **bloqueo estricto por RLS que le impide escribir o alterar notas clínicas del médico**.
+- **Declaración vs Confirmación:** Todo dato ingresado a través del asistente se registra como `declarada_por = patient_id` y queda sujeto a validación y confirmación del profesional médico (`confirmada_por`).
+
+### 12.4 Propuesta de Procedencia de Datos (Data Provenance)
+- **Problema identificado:** Dado que el Asistente Clínico actúa bajo la sesión del paciente (`app.current_user_id`), ni `audit_logs.user_id` ni los triggers de auditoría distinguen si un dato fue tipeado manualmente por el paciente o transcrito conversacionalmente por el asistente de IA.
+- **Mecanismo propuesto:** Incorporar una columna opcional `origin text NOT NULL DEFAULT 'user'` con restricción `CHECK (origin IN ('user', 'ai_assistant', 'doctor_confirmed'))` en las tablas de entrada del paciente (`patient_allergies`, `patient_conditions`, `patient_medications`, `pre_consultation_forms`, `vital_signs`).
+- **Consecuencia:** 
+  1. La auditoría captura `origin` dentro del payload JSON `new_values` de `fn_audit_log()` sin modificar los triggers existentes.
+  2. Las políticas de RLS permanecen intactas (evalúan propiedad por `user_id`, no por `origin`).
+  3. La ficha clínica y el informe pueden indicar visualmente la fuente del dato para el médico.
+
+### 12.5 Orden de Construcción
+`RF-01 (Auth / Login)` → `RF-08 (Escritura Agenda Médico)` → `RF-25 (Cancelación de Citas)` → `RF-23 (Asistente Informativo - Landing)` → `RF-24 (Asistente Clínico - Dashboard)`.
+
+---
+
+## 13. Declaración de Deuda Técnica Controlada (Hallazgo 10)
+
+- **Hallazgo 10 (GRANT UPDATE blanket en `schedules` y `schedule_blocks`):**
+  - **Estado:** Declarado como Deuda Técnica Controlada.
+  - **Precisión Técnica RLS:** PostgreSQL Row Level Security (RLS) evalúa predicados a nivel de fila (`USING` / `WITH CHECK`), determinando cuáles *filas* se pueden consultar o modificar, **nunca cuáles *columnas***.
+  - **Mecanismo en `schedules` y `schedule_blocks`:** La columna `doctor_profile_id` queda protegida contra alteraciones accidentales en un `UPDATE` únicamente porque la regla de la política RLS evalúa la coincidencia del propietario (`dp.id = doctor_profile_id AND dp.user_id = app.current_user_id`). Intentar cambiar `doctor_profile_id` a otro médico hace fallar el predicado de la fila resultante. Las demás columnas (`franja`, `slot_duration`, `day_of_week`, `blocked_date`, `reason`) son libremente editables por el dueño de la agenda, lo cual corresponde al comportamiento de negocio intencionado.
+  - **Deuda Abierta:** Para las tablas donde esta coincidencia de predicado no se produce, o si se requiere inmutabilidad estricta a nivel DDL sobre columnas específicas, la deuda del Hallazgo 10 se saldará acotando los permisos con `GRANT UPDATE (columnas...)`.

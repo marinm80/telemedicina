@@ -16,6 +16,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use Tests\TestCase;
+use App\Models\Role;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 final class RlsCoverageTest extends TestCase
@@ -212,9 +214,6 @@ final class RlsCoverageTest extends TestCase
         $adminCount = (int) $stmt->fetchColumn();
         $this->assertEquals(1, $adminCount, 'El admin debe ver todos los audit_logs');
 
-        // Cleanup
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->whereIn('id', [$user->id, $otherUser->id])->delete();
     }
 
     /**
@@ -286,31 +285,95 @@ final class RlsCoverageTest extends TestCase
             $this->assertStringContainsString('row-level security', $e->getMessage());
         }
 
-        // Cleanup
-        $mc->table('audit_logs')->delete();
-        $mc->table('user_roles')->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->delete();
     }
 
-    /**
-     * Deuda Regla 3: doctor_profiles se inserta en 3 setUp como fixture de
-     * pgsql_migration, pero no existe prueba del camino legítimo (doctor
-     * crea su propio perfil via app_runtime con RLS).
-     */
     public function test_doctor_profiles_camino_legitimo_insert(): void
     {
-        $this->markTestSkipped('PENDIENTE RF-08: falta prueba del camino legítimo para doctor_profiles (doctor crea perfil via app_runtime)');
+        $mc = DB::connection('pgsql_migration');
+        $doctorRole = Role::where('name', 'doctor')->first();
+
+        $doctorId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('users')->insert([
+            'id' => $doctorId,
+            'name' => 'Doctor Legit',
+            'last_name' => 'Test',
+            'email' => 'doc_legit_' . \Illuminate\Support\Str::random(5) . '@test.com',
+            'password' => bcrypt('Password123!'),
+            'timezone' => 'UTC',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $mc->table('user_roles')->insert(['user_id' => $doctorId, 'role_id' => $doctorRole->id]);
+
+        DB::statement("SET app.current_user_id = '{$doctorId}'");
+        DB::statement("SET app.current_user_role = 'doctor'");
+
+        $profileId = \Illuminate\Support\Str::uuid()->toString();
+        $created = \App\Models\DoctorProfile::create([
+            'id' => $profileId,
+            'user_id' => $doctorId,
+            'license_number' => 'LIC-LEGIT-' . \Illuminate\Support\Str::random(4),
+            'university' => 'Universidad Central',
+            'years_experience' => 10,
+            'description' => 'Médico de prueba RLS',
+            'consultation_fee' => 75.00,
+            'status' => 'pending',
+        ]);
+
+        $this->assertNotNull($created);
+        $this->assertEquals($doctorId, $created->user_id);
     }
 
-    /**
-     * Deuda Regla 3: schedules se inserta en 3 setUp como fixture de
-     * pgsql_migration, pero no existe prueba del camino legítimo (doctor
-     * crea su agenda via app_runtime con RLS).
-     */
     public function test_schedules_camino_legitimo_insert(): void
     {
-        $this->markTestSkipped('PENDIENTE RF-08: falta prueba del camino legítimo para schedules (doctor gestiona agenda via app_runtime)');
+        $mc = DB::connection('pgsql_migration');
+        $doctorRole = Role::where('name', 'doctor')->first();
+
+        $doctorId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('users')->insert([
+            'id' => $doctorId,
+            'name' => 'Doctor Sched',
+            'last_name' => 'Test',
+            'email' => 'doc_sched_' . \Illuminate\Support\Str::random(5) . '@test.com',
+            'password' => bcrypt('Password123!'),
+            'timezone' => 'UTC',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $mc->table('user_roles')->insert(['user_id' => $doctorId, 'role_id' => $doctorRole->id]);
+
+        $profileId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('doctor_profiles')->insert([
+            'id' => $profileId,
+            'user_id' => $doctorId,
+            'license_number' => 'LIC-SCHED-' . \Illuminate\Support\Str::random(4),
+            'university' => 'Universidad Central',
+            'years_experience' => 10,
+            'description' => 'Médico de prueba RLS',
+            'consultation_fee' => 75.00,
+            'status' => 'approved',
+            'approved_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        DB::statement("SET app.current_user_id = '{$doctorId}'");
+        DB::statement("SET app.current_user_role = 'doctor'");
+
+        $doctorUser = User::find($doctorId);
+        $this->actingAs($doctorUser);
+
+        $response = $this->postJson('/api/schedules', [
+            'day_of_week' => 1,
+            'inicio' => '08:00:00',
+            'fin' => '12:00:00',
+            'slot_duration' => 30,
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJsonStructure(['data' => ['id', 'doctor_profile_id', 'day_of_week', 'franja']]);
     }
 
     // ================================================================
@@ -369,10 +432,6 @@ final class RlsCoverageTest extends TestCase
             $this->assertStringContainsString('permission denied', $e->getMessage());
         }
 
-        // Cleanup
-        $mc->table('user_roles')->where('user_id', $userId)->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->where('id', $userId)->delete();
     }
 
     /**
@@ -401,9 +460,6 @@ final class RlsCoverageTest extends TestCase
 
         $this->assertFalse($row, 'El paciente NO debe poder leer el User de otro (sin cita)');
 
-        // Cleanup
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->whereIn('id', [$userId, $otherId])->delete();
     }
 
     /**
@@ -440,10 +496,6 @@ final class RlsCoverageTest extends TestCase
         $this->assertNotFalse($row, 'Paciente debe ver doctor aprobado en v_doctor_directory');
         $this->assertEquals('50.00', $row['consultation_fee']);
 
-        // Cleanup
-        $mc->table('doctor_profiles')->where('id', $dpId)->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->whereIn('id', [$doctorUserId, $patientId])->delete();
     }
 
     /**
@@ -478,10 +530,6 @@ final class RlsCoverageTest extends TestCase
 
         $this->assertFalse($row, 'Paciente NO debe ver doctor_profiles pending (rejection_reason expuesto)');
 
-        // Cleanup
-        $mc->table('doctor_profiles')->where('id', $dpId)->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->whereIn('id', [$doctorUserId, $patientId])->delete();
     }
 
     /**
@@ -513,10 +561,6 @@ final class RlsCoverageTest extends TestCase
         $this->assertNotFalse($row, 'Paciente debe poder leer su propio user_roles');
         $this->assertEquals($userId, $row['user_id']);
 
-        // Cleanup
-        $mc->table('user_roles')->where('user_id', $userId)->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->where('id', $userId)->delete();
     }
 
     /**
@@ -546,10 +590,6 @@ final class RlsCoverageTest extends TestCase
 
         $this->assertFalse($row, 'Paciente NO debe poder leer user_roles de otro');
 
-        // Cleanup
-        $mc->table('user_roles')->where('user_id', $otherId)->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->whereIn('id', [$userId, $otherId])->delete();
     }
 
     /**
@@ -602,9 +642,6 @@ final class RlsCoverageTest extends TestCase
             $this->assertStringContainsString('permission denied', $e->getMessage());
         }
 
-        // Cleanup
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->where('id', $userId)->delete();
     }
 
     /**
@@ -653,11 +690,6 @@ final class RlsCoverageTest extends TestCase
         $columns = array_keys($row);
         $this->assertNotContains('reason', $columns, 'v_schedule_blocks_availability NO debe exponer reason');
 
-        // Cleanup
-        $mc->table('schedule_blocks')->where('id', $blockId)->delete();
-        $mc->table('doctor_profiles')->where('id', $dpId)->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->whereIn('id', [$doctorUserId, $patientId])->delete();
     }
 
     /**
@@ -701,9 +733,6 @@ final class RlsCoverageTest extends TestCase
             $this->assertStringContainsString('app.current_user_id', $e->getMessage());
         }
 
-        // Cleanup
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->where('id', $userId)->delete();
     }
 
     /**
@@ -745,9 +774,6 @@ final class RlsCoverageTest extends TestCase
         $result2 = $stmt3->fetchColumn();
         $this->assertEmpty($result2, 'Token incorrecto NO debe devolver nada');
 
-        // Cleanup
-        $mc->table('audit_logs')->delete();
-        $mc->table('users')->where('id', $userId)->delete();
     }
 
     /**
@@ -788,8 +814,11 @@ final class RlsCoverageTest extends TestCase
     }
 
     /**
-     * schedule_blocks.reason NO es legible sin la vista.
-     * Verifica Hallazgo 20: REVOKE SELECT tabla + política sin cláusula pública.
+     * schedule_blocks.reason NO es legible por paciente sin la vista.
+     * Antes de la 000007: sin GRANT SELECT, fallaba con permission denied.
+     * Después de la 000007: tiene GRANT SELECT pero RLS devuelve cero filas
+     * (paciente no es dueño, ni admin, ni worker). El paciente accede a
+     * bloqueos SOLO via v_schedule_blocks_availability (sin reason).
      */
     public function test_schedule_blocks_reason_no_legible_por_paciente(): void
     {
@@ -835,20 +864,12 @@ final class RlsCoverageTest extends TestCase
         $pdo->exec("SET app.current_user_id = '{$patientId}'");
         $pdo->exec("SET app.current_user_role = 'patient'");
 
-        // Paciente NO puede leer schedule_blocks directamente
-        try {
-            $pdo->query('SELECT reason FROM schedule_blocks');
-            $this->fail('Paciente NO debe poder SELECT schedule_blocks directamente');
-        } catch (\PDOException $e) {
-            $this->assertStringContainsString('permission denied', $e->getMessage());
-        }
+        // Paciente tiene GRANT SELECT (000007) pero RLS devuelve cero filas:
+        // schedule_blocks_select solo permite dueño + admin + worker.
+        $stmt = $pdo->query("SELECT reason FROM schedule_blocks WHERE id = '{$blockId}'");
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        $this->assertCount(0, $rows, 'Paciente NO debe ver bloqueos via tabla directa (RLS cero filas)');
 
-        // Cleanup
-        $mc->table('schedule_blocks')->where('id', $blockId)->delete();
-        $mc->table('doctor_profiles')->where('id', $dpId)->delete();
-        $mc->table('audit_logs')->delete();
-        $mc->table('user_roles')->where('user_id', $patientId)->delete();
-        $mc->table('users')->whereIn('id', [$doctorUserId, $patientId])->delete();
     }
 
     /**
@@ -857,6 +878,392 @@ final class RlsCoverageTest extends TestCase
      */
     public function test_auth_login_flujo_legitimo(): void
     {
-        $this->markTestSkipped('PENDIENTE RF-01: falta prueba del flujo de login vía SecureEloquentUserProvider + fn_user_for_auth');
+        $mc = DB::connection('pgsql_migration');
+        $mc->unprepared(self::TRUNCATE_SQL);
+
+        $patientRole = Role::where('name', 'patient')->first();
+        $doctorRole = Role::where('name', 'doctor')->first();
+
+        // 1. Crear usuario activo legítimo (paciente) y médico para la cita
+        $patientId = \Illuminate\Support\Str::uuid()->toString();
+        $patientEmail = 'paciente_login_' . \Illuminate\Support\Str::random(5) . '@test.com';
+        $rawPassword = 'Password123!';
+
+        $mc->table('users')->insert([
+            'id' => $patientId,
+            'name' => 'Paciente Login',
+            'last_name' => 'Test',
+            'email' => $patientEmail,
+            'password' => bcrypt($rawPassword),
+            'timezone' => 'America/Tegucigalpa',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $mc->table('user_roles')->insert(['user_id' => $patientId, 'role_id' => $patientRole->id]);
+
+        // Usuario 2: inactivo (is_active = false)
+        $inactiveId = \Illuminate\Support\Str::uuid()->toString();
+        $inactiveEmail = 'inactivo_' . \Illuminate\Support\Str::random(5) . '@test.com';
+        $mc->table('users')->insert([
+            'id' => $inactiveId,
+            'name' => 'Usuario Inactivo',
+            'last_name' => 'Test',
+            'email' => $inactiveEmail,
+            'password' => bcrypt($rawPassword),
+            'timezone' => 'UTC',
+            'is_active' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $mc->table('user_roles')->insert(['user_id' => $inactiveId, 'role_id' => $patientRole->id]);
+
+        // Usuario 3: otro paciente para verificar aislamiento RLS
+        $otherId = \Illuminate\Support\Str::uuid()->toString();
+        $otherEmail = 'otro_' . \Illuminate\Support\Str::random(5) . '@test.com';
+        $mc->table('users')->insert([
+            'id' => $otherId,
+            'name' => 'Otro Paciente',
+            'last_name' => 'Test',
+            'email' => $otherEmail,
+            'password' => bcrypt($rawPassword),
+            'timezone' => 'UTC',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $mc->table('user_roles')->insert(['user_id' => $otherId, 'role_id' => $patientRole->id]);
+
+        // Médico para citas
+        $doctorId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('users')->insert([
+            'id' => $doctorId,
+            'name' => 'Dr Login',
+            'last_name' => 'Test',
+            'email' => 'doc_login_' . \Illuminate\Support\Str::random(5) . '@test.com',
+            'password' => bcrypt($rawPassword),
+            'timezone' => 'UTC',
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $mc->table('user_roles')->insert(['user_id' => $doctorId, 'role_id' => $doctorRole->id]);
+
+        // Insertar 1 cita para el paciente 1 y 1 cita para el paciente 3
+        $mc->table('appointments')->insert([
+            'id' => \Illuminate\Support\Str::uuid()->toString(),
+            'patient_id' => $patientId,
+            'doctor_id' => $doctorId,
+            'franja' => '[2026-08-20 09:00:00+00, 2026-08-20 09:30:00+00)',
+            'status' => 'confirmed',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $mc->table('appointments')->insert([
+            'id' => \Illuminate\Support\Str::uuid()->toString(),
+            'patient_id' => $otherId,
+            'doctor_id' => $doctorId,
+            'franja' => '[2026-08-20 10:00:00+00, 2026-08-20 10:30:00+00)',
+            'status' => 'confirmed',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // -------------------------------------------------------------
+        // CASO A: Contraseña incorrecta -> no revela si correo existe
+        // -------------------------------------------------------------
+        $resWrongPassword = $this->post('/login', [
+            'email' => $patientEmail,
+            'password' => 'WrongPassword999!',
+        ]);
+        $resWrongPassword->assertStatus(302);
+        $resWrongPassword->assertSessionHasErrors('email');
+        $msgWrongPassword = session('errors')->get('email')[0];
+
+        $resNonExistent = $this->post('/login', [
+            'email' => 'no_existe_jamas@test.com',
+            'password' => 'Password123!',
+        ]);
+        $resNonExistent->assertStatus(302);
+        $resNonExistent->assertSessionHasErrors('email');
+        $msgNonExistent = session('errors')->get('email')[0];
+
+        // ANTI-ENUMERACIÓN: ambos mensajes deben ser exactamente idénticos
+        $this->assertEquals(
+            $msgWrongPassword,
+            $msgNonExistent,
+            'El mensaje de error debe ser idéntico para contraseña incorrecta y correo inexistente (anti-enumeración)'
+        );
+        $this->assertGuest();
+
+        // -------------------------------------------------------------
+        // CASO B: Usuario inactivo (is_active = false) -> no puede entrar
+        // -------------------------------------------------------------
+        // Confirmar primero que fn_user_for_auth lo filtra en PostgreSQL
+        $dbRowInactive = DB::selectOne('SELECT * FROM fn_user_for_auth(?)', [$inactiveEmail]);
+        $this->assertNull($dbRowInactive, 'fn_user_for_auth DEBE filtrar usuarios con is_active = false');
+
+        $resInactive = $this->post('/login', [
+            'email' => $inactiveEmail,
+            'password' => $rawPassword,
+        ]);
+        $resInactive->assertStatus(302);
+        $resInactive->assertSessionHasErrors('email');
+        $this->assertGuest();
+
+        // -------------------------------------------------------------
+        // CASO C: Credenciales correctas -> 302 y sesión establecida
+        // -------------------------------------------------------------
+        $resSuccess = $this->post('/login', [
+            'email' => $patientEmail,
+            'password' => $rawPassword,
+        ]);
+        $resSuccess->assertStatus(302);
+
+        DB::statement("SET app.current_user_id = '{$patientId}'");
+        DB::statement("SET app.current_user_role = 'patient'");
+        $patientUser = User::find($patientId);
+
+        $this->assertAuthenticatedAs($patientUser);
+
+        // -------------------------------------------------------------
+        // CASO D: Post-login RLS — app.current_user_id fijado en petición
+        // -------------------------------------------------------------
+        // En la sesión autenticada, las consultas a appointments vía Eloquent/DB
+        // con el middleware RLS deben devolver SOLO las citas del usuario autenticado.
+        $this->actingAs($patientUser);
+        $myAppointments = \App\Models\Appointment::all();
+        $this->assertCount(1, $myAppointments, 'El paciente autenticado debe ver exactamente SU cita (1) por RLS, no todas (2)');
+        $this->assertEquals($patientId, $myAppointments->first()->patient_id);
+    }
+
+    // ================================================================
+    // RF-08 — Migración 000007: GRANT SELECT schedule_blocks + trigger timezone
+    // ================================================================
+
+    /**
+     * Paso 0a parte 1: el médico dueño lee sus bloqueos CON reason.
+     * La 000007 restauró GRANT SELECT. La política schedule_blocks_select
+     * permite al dueño leer. Verificamos que reason es accesible.
+     */
+    public function test_positiva_schedule_blocks_owner_reads_with_reason(): void
+    {
+        $mc = DB::connection('pgsql_migration');
+
+        $doctorUserId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('users')->insert([
+            'id' => $doctorUserId, 'name' => 'DocOwner', 'last_name' => 'T',
+            'email' => 'docown_' . \Illuminate\Support\Str::random(5) . '@test.com',
+            'password' => bcrypt('p'), 'timezone' => 'UTC', 'is_active' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $dpId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('doctor_profiles')->insert([
+            'id' => $dpId, 'user_id' => $doctorUserId, 'status' => 'approved',
+            'license_number' => 'OWN001', 'consultation_fee' => 50.00,
+            'university' => 'TestU', 'description' => 'Test',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $blockId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('schedule_blocks')->insert([
+            'id' => $blockId, 'doctor_profile_id' => $dpId,
+            'blocked_date' => '2026-12-25',
+            'franja' => '[08:00:00, 12:00:00)',
+            'reason' => 'Cirugía personal — dato sensible',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $config = config('database.connections.pgsql');
+        $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
+        $pdo = new \PDO($dsn, $config['username'], $config['password']);
+        $pdo->exec("SET app.current_user_id = '{$doctorUserId}'");
+        $pdo->exec("SET app.current_user_role = 'doctor'");
+
+        // Dueño lee su bloqueo con reason
+        $stmt = $pdo->query("SELECT id, reason FROM schedule_blocks WHERE id = '{$blockId}'");
+        $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+        $this->assertNotFalse($row, 'Dueño debe leer su propio bloqueo');
+        $this->assertEquals('Cirugía personal — dato sensible', $row['reason']);
+
+    }
+
+    /**
+     * Paso 0a parte 2: otro médico NO lee bloqueos ajenos.
+     * RLS schedule_blocks_select solo permite dueño + admin + worker.
+     */
+    public function test_positiva_schedule_blocks_other_doctor_reads_zero(): void
+    {
+        $mc = DB::connection('pgsql_migration');
+
+        $doctorUserId = \Illuminate\Support\Str::uuid()->toString();
+        $otherDoctorId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('users')->insert([
+            ['id' => $doctorUserId, 'name' => 'DocA', 'last_name' => 'T',
+             'email' => 'doca_' . \Illuminate\Support\Str::random(5) . '@test.com',
+             'password' => bcrypt('p'), 'timezone' => 'UTC', 'is_active' => true,
+             'created_at' => now(), 'updated_at' => now()],
+            ['id' => $otherDoctorId, 'name' => 'DocB', 'last_name' => 'T',
+             'email' => 'docb_' . \Illuminate\Support\Str::random(5) . '@test.com',
+             'password' => bcrypt('p'), 'timezone' => 'UTC', 'is_active' => true,
+             'created_at' => now(), 'updated_at' => now()],
+        ]);
+        $dpId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('doctor_profiles')->insert([
+            'id' => $dpId, 'user_id' => $doctorUserId, 'status' => 'approved',
+            'license_number' => 'OTH001', 'consultation_fee' => 50.00,
+            'university' => 'TestU', 'description' => 'Test',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $blockId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('schedule_blocks')->insert([
+            'id' => $blockId, 'doctor_profile_id' => $dpId,
+            'blocked_date' => '2026-12-25',
+            'franja' => '[08:00:00, 12:00:00)',
+            'reason' => 'No debería verlo',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $config = config('database.connections.pgsql');
+        $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
+        $pdo = new \PDO($dsn, $config['username'], $config['password']);
+        // Otro médico, no dueño
+        $pdo->exec("SET app.current_user_id = '{$otherDoctorId}'");
+        $pdo->exec("SET app.current_user_role = 'doctor'");
+
+        $stmt = $pdo->query("SELECT id FROM schedule_blocks WHERE id = '{$blockId}'");
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        $this->assertCount(0, $rows, 'Otro médico NO debe ver bloqueos ajenos');
+
+    }
+
+    /**
+     * Paso 0a parte 3: paciente NO lee bloqueos desde la tabla directa.
+     * Paciente no es dueño, ni admin, ni worker. RLS devuelve cero filas.
+     * (El paciente lee bloqueos sin reason via v_schedule_blocks_availability,
+     *  eso ya está cubierto en test_positiva_v_schedule_blocks_sin_reason.)
+     */
+    public function test_positiva_schedule_blocks_patient_reads_zero_from_table(): void
+    {
+        $mc = DB::connection('pgsql_migration');
+
+        $doctorUserId = \Illuminate\Support\Str::uuid()->toString();
+        $patientId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('users')->insert([
+            ['id' => $doctorUserId, 'name' => 'DocPat', 'last_name' => 'T',
+             'email' => 'docpat_' . \Illuminate\Support\Str::random(5) . '@test.com',
+             'password' => bcrypt('p'), 'timezone' => 'UTC', 'is_active' => true,
+             'created_at' => now(), 'updated_at' => now()],
+            ['id' => $patientId, 'name' => 'PatTab', 'last_name' => 'T',
+             'email' => 'pattab_' . \Illuminate\Support\Str::random(5) . '@test.com',
+             'password' => bcrypt('p'), 'timezone' => 'UTC', 'is_active' => true,
+             'created_at' => now(), 'updated_at' => now()],
+        ]);
+        $dpId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('doctor_profiles')->insert([
+            'id' => $dpId, 'user_id' => $doctorUserId, 'status' => 'approved',
+            'license_number' => 'PAT001', 'consultation_fee' => 50.00,
+            'university' => 'TestU', 'description' => 'Test',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $blockId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('schedule_blocks')->insert([
+            'id' => $blockId, 'doctor_profile_id' => $dpId,
+            'blocked_date' => '2026-12-25',
+            'franja' => '[08:00:00, 12:00:00)',
+            'reason' => 'No visible para paciente',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $config = config('database.connections.pgsql');
+        $dsn = "pgsql:host={$config['host']};port={$config['port']};dbname={$config['database']}";
+        $pdo = new \PDO($dsn, $config['username'], $config['password']);
+        $pdo->exec("SET app.current_user_id = '{$patientId}'");
+        $pdo->exec("SET app.current_user_role = 'patient'");
+
+        $stmt = $pdo->query("SELECT id FROM schedule_blocks WHERE id = '{$blockId}'");
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+        $this->assertCount(0, $rows, 'Paciente NO debe leer bloqueos desde tabla directa');
+
+    }
+
+    /**
+     * Trigger trg_prevent_timezone_change: rechaza cambio de timezone
+     * cuando hay citas futuras activas, permite cuando no hay.
+     * Decisión 11.1d de DECISIONES_ALCANCE.md.
+     */
+    public function test_trigger_prevents_timezone_change_with_future_appointments(): void
+    {
+        $mc = DB::connection('pgsql_migration');
+
+        $doctorUserId = \Illuminate\Support\Str::uuid()->toString();
+        $patientId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('users')->insert([
+            ['id' => $doctorUserId, 'name' => 'DocTZ', 'last_name' => 'T',
+             'email' => 'doctz_' . \Illuminate\Support\Str::random(5) . '@test.com',
+             'password' => bcrypt('p'), 'timezone' => 'America/New_York', 'is_active' => true,
+             'created_at' => now(), 'updated_at' => now()],
+            ['id' => $patientId, 'name' => 'PatTZ', 'last_name' => 'T',
+             'email' => 'pattz_' . \Illuminate\Support\Str::random(5) . '@test.com',
+             'password' => bcrypt('p'), 'timezone' => 'UTC', 'is_active' => true,
+             'created_at' => now(), 'updated_at' => now()],
+        ]);
+        $dpId = \Illuminate\Support\Str::uuid()->toString();
+        $mc->table('doctor_profiles')->insert([
+            'id' => $dpId, 'user_id' => $doctorUserId, 'status' => 'approved',
+            'license_number' => 'TZ001', 'consultation_fee' => 50.00,
+            'university' => 'TestU', 'description' => 'Test',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        // Crear cita futura confirmada
+        $appointmentId = \Illuminate\Support\Str::uuid()->toString();
+        $futureStart = now()->addDays(7)->setHour(14)->setMinute(0)->setSecond(0);
+        $futureEnd = (clone $futureStart)->addMinutes(30);
+        $mc->table('appointments')->insert([
+            'id' => $appointmentId,
+            'patient_id' => $patientId,
+            'doctor_id' => $doctorUserId,
+            'franja' => "[{$futureStart->toIso8601String()},{$futureEnd->toIso8601String()})",
+            'status' => 'confirmed',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        // CASO 1: Cambiar timezone con cita futura → DEBE FALLAR
+        $threw = false;
+        try {
+            $mc->statement("UPDATE users SET timezone = 'America/Chicago' WHERE id = ?", [$doctorUserId]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            $threw = true;
+            $this->assertStringContainsString(
+                'No se puede cambiar la zona horaria con citas futuras activas',
+                $e->getMessage()
+            );
+        }
+        $this->assertTrue($threw, 'El trigger DEBE rechazar cambio de timezone con citas futuras');
+
+        // Verificar que la timezone NO cambió
+        $tz = $mc->table('users')->where('id', $doctorUserId)->value('timezone');
+        $this->assertEquals('America/New_York', $tz);
+
+        // CASO 2: Cancelar la cita, luego cambiar timezone → DEBE FUNCIONAR
+        $mc->table('appointments')->where('id', $appointmentId)
+           ->update(['status' => 'cancelled']);
+
+        $mc->statement("UPDATE users SET timezone = 'America/Chicago' WHERE id = ?", [$doctorUserId]);
+        $tz = $mc->table('users')->where('id', $doctorUserId)->value('timezone');
+        $this->assertEquals('America/Chicago', $tz);
+
+        // CASO 3: Cambiar campo no-timezone con cita futura → DEBE FUNCIONAR
+        // (Restaurar cita, verificar que actualizar name no dispara)
+        $mc->table('appointments')->where('id', $appointmentId)
+           ->update(['status' => 'confirmed']);
+
+        $mc->statement("UPDATE users SET name = 'DocTZRenamed' WHERE id = ?", [$doctorUserId]);
+        $name = $mc->table('users')->where('id', $doctorUserId)->value('name');
+        $this->assertEquals('DocTZRenamed', $name);
+
     }
 }

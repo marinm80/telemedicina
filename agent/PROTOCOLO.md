@@ -181,6 +181,16 @@ G4    ENTREGA. Junto al código entregá:
         qué alternativa descartaste y por qué. Si no podés explicarla simple,
         SIMPLIFICÁ EL CÓDIGO en lugar de elaborar la explicación.
       El commit y el push los hace el humano. Siempre.
+
+G4.5  ATOMICIDAD DOCUMENTO–CÓDIGO. El cambio de un documento de contrato y el
+      código o la migración que lo vuelve cierto van en el MISMO commit. Nunca
+      dejes un commit donde el documento describa un esquema, un endpoint o una
+      defensa que todavía no existe — ni al revés.
+      Y no pongas SQL comentado en un documento de esquema: un bloque `--` se
+      pasa por alto en un archivo largo, alguien lo descomenta creyendo que se
+      desactivó por error, y mientras tanto quien hojea asume que hay
+      protección. El requisito va en prosa marcado PENDIENTE; el SQL aparece en
+      la migración, cuando exista.
 ```
 
 ---

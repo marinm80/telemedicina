@@ -165,7 +165,6 @@ CREATE TABLE schedules (
     day_of_week       smallint NOT NULL,
     franja            timerange NOT NULL, -- Rango de horas sin fecha
     slot_duration     integer NOT NULL DEFAULT 30,
-    is_active         boolean NOT NULL DEFAULT true,
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now(),
     deleted_at        timestamptz NULL,
@@ -188,6 +187,13 @@ CREATE TABLE schedule_blocks (
     created_at        timestamptz NOT NULL DEFAULT now(),
     updated_at        timestamptz NOT NULL DEFAULT now()
 );
+
+-- Índice de idempotencia: prohíbe el duplicado exacto sin prohibir solapamiento.
+-- Motivo principal: un reintento con los mismos datos choca con 23505 y se
+-- traduce a 204 en lugar de crear basura. Solapamientos parciales son legítimos
+-- porque un bloqueo RESTA disponibilidad, y restar dos veces da lo mismo.
+CREATE UNIQUE INDEX schedule_blocks_unique_exact
+    ON schedule_blocks (doctor_profile_id, blocked_date, franja);
 
 -- 10. Citas Médicas
 CREATE TABLE appointments (
@@ -1107,5 +1113,49 @@ CREATE TRIGGER trg_audit_reschedule_requests AFTER INSERT OR UPDATE ON reschedul
 -- requiere ser dueño de la tabla o superusuario. Un intento retorna:
 --   ERROR: must be owner of table appointments
 -- Esta restricción se verifica en la prueba AuditLogTest.
-```
 
+-- ==========================================================================
+-- POLÍTICA DE BORRADO POR TABLA
+-- ==========================================================================
+-- Tres mecanismos coexisten. La elección es por tabla, no por convención global.
+--
+-- SOFT DELETE (deleted_at):
+--   schedules       El EXCLUDE necesita WHERE (deleted_at IS NULL) para liberar
+--                   el rango al borrar sin perder la fila. Borrado físico
+--                   liberaría el rango pero eliminaría el registro.
+--   appointments    FK rescheduled_from apunta a citas anteriores. Borrado
+--                   físico rompería la referencia.
+--   users           FK desde múltiples tablas. is_active controla acceso;
+--                   deleted_at controla existencia lógica.
+--
+-- BORRADO FÍSICO:
+--   schedule_blocks Sin EXCLUDE, sin FK entrante. El bloqueo es dato OPERATIVO,
+--                   no hecho clínico. Los hechos clínicos son inmutables; los
+--                   operativos se borran con rastro. El trigger
+--                   trg_audit_schedule_blocks (AFTER INSERT OR UPDATE OR DELETE)
+--                   graba el DELETE con old_values en audit_logs.
+--   audit_logs      Inmutable. No se borra nunca (ni físico ni lógico).
+--
+-- Sin declarar: todas las demás tablas. Definir al implementar cada módulo.
+-- ==========================================================================
+
+-- ==========================================================================
+-- REQUISITO: PROHIBIR CAMBIO DE TIMEZONE CON CITAS FUTURAS
+-- ==========================================================================
+-- Un médico no puede cambiar users.timezone si tiene citas activas futuras
+-- (pending o confirmed) con upper(franja) > now().
+--
+-- Motivo: las citas son instantes absolutos (tstzrange) y los horarios son
+-- hora de pared (timerange). Cambiar la zona desplaza la representación
+-- local sin mover los instantes. Citas confirmadas quedarían fuera del
+-- horario visible del médico.
+--
+-- Implementación: trigger BEFORE UPDATE ON users para evitar la condición de
+-- carrera verificar-y-después-escribir (D1 del protocolo).
+--
+-- IMPLEMENTADO: migración 2026_08_03_000007_rf08_schedule_schema.
+-- Función: fn_prevent_timezone_change_with_appointments()
+-- Trigger: trg_prevent_timezone_change
+-- El SQL vive en la migración, no aquí (G4.5).
+-- ==========================================================================
+```

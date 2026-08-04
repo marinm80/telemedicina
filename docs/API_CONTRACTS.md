@@ -253,6 +253,54 @@ Para evitar la fuga de información privada mediante enumeración de identificad
 
 ---
 
+## 4. Reglas de zona horaria en agenda recurrente
+
+### Hora de pared, sin zona
+
+Los campos `franja_inicio` y `franja_fin` de los endpoints de agenda recurrente
+(Endpoints 6, 7, 8) son **HORA DE PARED**: representan la hora del reloj del
+consultorio del médico, sin fecha y sin zona horaria.
+
+El formato aceptado es `HH:MM` o `HH:MM:SS`. Si el valor incluye un
+desplazamiento (`+HH:MM`, `-HH:MM`) o el indicador `Z`, el servidor rechaza
+con **422 Unprocessable Entity** y el mensaje:
+> "Las horas de agenda recurrente son hora de pared. No incluir desplazamiento
+> ni indicador de zona. Ejemplo válido: 09:00."
+
+La zona horaria del médico se obtiene de `users.timezone` y se aplica al
+**CALCULAR** los slots de disponibilidad para una fecha concreta, no al
+almacenar el horario.
+
+### Transición de horario de verano (DST) — hora inexistente (primavera)
+
+Cuando un slot cae en una hora de pared que no existe en la zona del médico
+(ej: 02:00–02:30 durante el adelanto de primavera), ese slot se omite del
+cálculo de disponibilidad. Los slots cuya hora de pared SÍ existe en esa
+fecha se generan normalmente. El día tiene menos slots.
+
+### Transición de horario de verano (DST) — hora repetida (otoño)
+
+Cuando una hora de pared ocurre dos veces en la zona del médico (retroceso
+de otoño), se usa la **PRIMERA ocurrencia** (pre-transición). Los slots de la
+segunda ocurrencia no se generan. El instante absoluto almacenado en la
+cita corresponde siempre a la primera ocurrencia.
+
+### Cambio de zona horaria del médico
+
+Un médico **NO puede** modificar su campo `timezone` si tiene citas activas
+(pending o confirmed) con fecha futura. El servidor rechaza con **409 Conflict**
+y el mensaje:
+> "No se puede cambiar la zona horaria con N citas futuras activas.
+> Cancele las citas pendientes antes de actualizar su zona horaria."
+
+Motivo: las citas son instantes absolutos (`tstzrange`) y los horarios son
+hora de pared (`timerange`). Cambiar la zona desplaza la representación local
+de las citas sin mover los instantes, dejando citas confirmadas fuera del
+horario visible del médico. Se aplica mediante trigger `BEFORE UPDATE ON users`
+para evitar condición de carrera verificar-y-después-escribir.
+
+---
+
 ### Endpoint 6: `POST /api/doctor/schedules`
 *Configuración de la disponibilidad recurrente semanal del médico.*
 
@@ -264,19 +312,44 @@ Para evitar la fuga de información privada mediante enumeración de identificad
   {
     "doctor_profile_id": "aa0e8400-e29b-41d4-a716-446655445555",
     "day_of_week": 1,
-    "franja_inicio": "08:00:00",
-    "franja_fin": "12:00:00",
+    "franja_inicio": "08:00",
+    "franja_fin": "12:00",
     "slot_duration": 30
   }
   ```
+  Validación:
+  * `franja_inicio`, `franja_fin`: formato `HH:MM` o `HH:MM:SS`. Sin desplazamiento ni `Z` (ver §4).
+  * `franja_inicio < franja_fin`.
+  * `slot_duration`: entero positivo, mínimo 10, máximo 480.
+  * `day_of_week`: entero 0 (domingo) a 6 (sábado).
 * **Respuesta 201 Created:**
   ```json
   {
     "id": "990e8400-e29b-41d4-a716-446655444444",
     "doctor_profile_id": "aa0e8400-e29b-41d4-a716-446655445555",
     "day_of_week": 1,
-    "franja": "('08:00:00', '12:00:00')",
-    "slot_duration": 30,
-    "is_active": true
+    "franja": "[08:00:00,12:00:00)",
+    "slot_duration": 30
+  }
+  ```
+* **Comportamiento ante Solapamiento (409 Conflict):**
+  Si la franja se solapa con un horario existente (no borrado) para el mismo médico y día:
+  ```json
+  {
+    "message": "La franja horaria se solapa con un horario recurrente existente.",
+    "error_code": "SCHEDULE_OVERLAP",
+    "errors": {
+      "franja": ["El rango solicitado se solapa con otro horario activo del mismo día."]
+    }
+  }
+  ```
+* **Comportamiento ante Hora de Pared con Zona (422):**
+  ```json
+  {
+    "message": "Las horas de agenda recurrente son hora de pared.",
+    "error_code": "VALIDATION_FAILED",
+    "errors": {
+      "franja_inicio": ["No incluir desplazamiento ni indicador de zona. Ejemplo válido: 09:00."]
+    }
   }
   ```

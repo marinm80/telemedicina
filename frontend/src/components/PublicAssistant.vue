@@ -45,18 +45,20 @@ async function sendMessage() {
       messages.value.push({
         role: 'assistant',
         text: data.reply,
-        doctors: data.doctors.length > 0 ? data.doctors : undefined,
+        doctors: data.doctors && data.doctors.length > 0 ? data.doctors : undefined,
       });
     } else {
+      const errData = await res.json().catch(() => ({ message: null }));
       messages.value.push({
         role: 'assistant',
-        text: 'Lo siento, no pude procesar tu consulta. Intenta de nuevo.',
+        text: errData.message || 'Lo siento, no pude procesar tu consulta en este momento. Intenta de nuevo.',
       });
     }
-  } catch {
+  } catch (err) {
+    console.error('Error de red al conectar con /api/assistant/public:', err);
     messages.value.push({
       role: 'assistant',
-      text: 'Error de conexión. Verifica tu red e intenta nuevamente.',
+      text: 'Error de conexión con el servidor. Verifica que el servicio backend esté en ejecución.',
     });
   } finally {
     isLoading.value = false;
@@ -102,8 +104,14 @@ async function scrollToBottom() {
             <button type="button" class="pub-assist__suggestion" @click="query = '¿Qué especialidades tienen?'; sendMessage()">
               ¿Qué especialidades tienen?
             </button>
-            <button type="button" class="pub-assist__suggestion" @click="query = '¿Hay cardiólogos disponibles hoy?'; sendMessage()">
-              ¿Hay cardiólogos disponibles?
+            <button type="button" class="pub-assist__suggestion" @click="query = '¿Cuál es el horario de atención?'; sendMessage()">
+              ¿Cuál es el horario de atención?
+            </button>
+            <button type="button" class="pub-assist__suggestion" @click="query = '¿Dónde están ubicados?'; sendMessage()">
+              ¿Dónde están ubicados?
+            </button>
+            <button type="button" class="pub-assist__suggestion" @click="query = '¿Cómo agendar una cita?'; sendMessage()">
+              ¿Cómo agendar una cita?
             </button>
           </div>
         </div>

@@ -210,3 +210,24 @@ Para eliminar la ambigüedad en citas transfronterizas, la agenda del paciente m
    Hora Médico:   10:00 AM (America/New_York)
    ```
 4. **Almacenamiento en BD:** La petición se envía al backend con la franja en formato ISO-8601 UTC (`2026-08-03T14:00:00Z`). El backend lo guarda como `timestamptz`, evitando desajustes y desfases.
+
+---
+
+## 8. Delimitación Visual y Regla de Convivencia: Chat Clínico (RF-14) vs. Asistente Conversacional (RF-23/RF-24)
+
+Para resolver de manera definitiva la ambigüedad visual y arquitectónica entre la comunicación médico-paciente y la asistencia por modelo de lenguaje, se establece la siguiente delimitación de interfaz (Gate 2A):
+
+1. **Ubicación del Chat Clínico (RF-14):**
+   El chat de la consulta (`RF-14 Consulta por Chat en Tiempo Real`) es el **CONTENIDO PRINCIPAL** del panel de interacción clínica (`ConsultationRoom.vue` / `InteractionArea.vue`). No es una ventana flotante ni un drawer lateral. Representa el canal directo con el médico tratante respaldado por Laravel Reverb y guardado como registro médico.
+
+2. **Diferenciación Visual y Paleta de Tokens (RF-23 / RF-24):**
+   El asistente (Informativo en landing `RF-23` o Clínico en dashboard `RF-24`) **NO se ubica en el panel derecho** de la consulta. Utiliza un widget flotante/modal exclusivo en el dashboard del paciente con una identidad visual claramente diferenciada:
+   - No utiliza los tokens primarios de marca (`--color-primary-*`), los cuales quedan reservados para las acciones clínicas y médicas de la interfaz.
+   - Utiliza exclusivamente los tokens de la paleta neutral e informativa (`--color-info-*`), con etiquetas y cabecera explícita: `"Asistente Informativo IA - No es atención médica en vivo"`.
+
+3. **Ausencia Absoluta durante Consulta Activa (Regla de Exclusión Total):**
+   El asistente **NO EXISTE** (no se encuentra ni siquiera colapsado o en segundo plano) mientras el paciente mantenga una consulta clínica en curso (`consultations.status = 'in_progress'`). 
+   - **Garantía Backend:** El endpoint del asistente clínico (`RF-24`) rechaza cualquier petición con código `409 Conflict` / `403 Forbidden` si detecta una consulta activa para el usuario autenticado.
+
+4. **Separación Temporal (Asistente Antes, Médico Durante):**
+   La utilidad del asistente se enmarca en la ventana previa a la cita: guiar al paciente en la recolección de motivos y antecedentes para el **RF-13 (Cuestionario Pre-consulta)** y el refresco de la ficha longitudinal. Al momento de abrirse la consulta en vivo (`status = 'in_progress'`), la IA se apaga por completo, garantizando que el canal sea 100% humano con el profesional de la salud.
