@@ -3,8 +3,9 @@
   Landing — Página pública sin sesión
   AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
   ====================================================================
-  Tres secciones: Hero + Directorio de Especialistas + Agente (placeholder)
-  Layout propio (LandingLayout), no usa AppLayout.
+  Diseño orientado a portafolio: Hero con asistente AI + paciente,
+  dos CTAs (asistente vs tradicional), tarjetas de beneficios,
+  directorio de especialistas.
 -->
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue';
@@ -45,50 +46,92 @@ function formatFee(fee: number): string {
     minimumFractionDigits: 2,
   }).format(fee);
 }
-
-const SPECIALTIES = computed(() => {
-  const set = new Set(doctors.value.map((d) => d.specialty));
-  return [...set].sort();
-});
 </script>
 
 <template>
   <LandingLayout>
     <!-- ===== HERO ===== -->
     <section class="hero">
-      <div class="hero__content">
-        <h1 class="hero__title">
-          Plataforma de
-          <span class="hero__title--accent">Telemedicina</span>
-        </h1>
-        <p class="hero__subtitle">
-          Consultas médicas seguras, privadas y accesibles desde cualquier lugar.
-          Conectamos pacientes con especialistas certificados en tiempo real.
-        </p>
-        <div class="hero__actions">
-          <button type="button" class="hero__cta hero__cta--primary" @click="scrollToDirectory">
-            <i class="pi pi-users" aria-hidden="true" />
-            Ver Especialistas
-          </button>
-          <button type="button" class="hero__cta hero__cta--secondary" disabled>
-            <i class="pi pi-sign-in" aria-hidden="true" />
-            Iniciar Sesión
-          </button>
+      <div class="hero__inner">
+        <!-- Asistente AI (izquierda) -->
+        <div class="hero__assistant">
+          <img
+            src="/images/ai-assistant.jpg"
+            alt="Asistente médico inteligente"
+            class="hero__assistant-img"
+            width="280"
+            height="280"
+          />
+          <div class="hero__speech-bubble">
+            <p>¡Hola! Soy tu asistente médico inteligente. ¿Cómo puedo ayudarte hoy?</p>
+          </div>
         </div>
-        <div class="hero__badges">
-          <span class="hero__badge">
-            <i class="pi pi-shield" aria-hidden="true" />
-            WCAG AA
-          </span>
-          <span class="hero__badge">
-            <i class="pi pi-lock" aria-hidden="true" />
-            Datos encriptados
-          </span>
-          <span class="hero__badge">
-            <i class="pi pi-verified" aria-hidden="true" />
-            Notas firmadas SHA-256
+
+        <!-- Contenido central -->
+        <div class="hero__content">
+          <h1 class="hero__title">
+            RESERVA TU CITA MÉDICA EN MINUTOS CON NUESTRO
+            <span class="hero__title--accent">ASISTENTE INTELIGENTE.</span>
+          </h1>
+          <p class="hero__subtitle">
+            Nuestro sistema agéntico simplifica y agiliza el proceso para que
+            encuentres al médico adecuado, rápido.
+          </p>
+          <div class="hero__actions">
+            <button type="button" class="hero__cta hero__cta--primary" @click="scrollToDirectory">
+              <i class="pi pi-bolt" aria-hidden="true" />
+              Empezar Reservación con Asistente
+            </button>
+            <button type="button" class="hero__cta hero__cta--outline" @click="scrollToDirectory">
+              <i class="pi pi-search" aria-hidden="true" />
+              Buscar Métodos Tradicionales
+            </button>
+          </div>
+        </div>
+
+        <!-- Ilustración paciente (derecha) -->
+        <div class="hero__illustration">
+          <img
+            src="/images/hero-patient.jpg"
+            alt="Paciente usando la aplicación de telemedicina"
+            class="hero__illustration-img"
+            width="320"
+            height="320"
+          />
+          <span class="hero__agentic-badge">
+            <i class="pi pi-microchip-ai" aria-hidden="true" />
+            agentic
           </span>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== BENEFICIOS ===== -->
+    <section class="benefits">
+      <div class="benefits__inner">
+        <article class="benefit-card">
+          <div class="benefit-card__icon-wrap benefit-card__icon-wrap--teal">
+            <i class="pi pi-clock" aria-hidden="true" />
+          </div>
+          <h3 class="benefit-card__title">Atención 24/7</h3>
+          <p class="benefit-card__text">Tu asistente siempre disponible</p>
+        </article>
+
+        <article class="benefit-card">
+          <div class="benefit-card__icon-wrap benefit-card__icon-wrap--green">
+            <i class="pi pi-search" aria-hidden="true" />
+          </div>
+          <h3 class="benefit-card__title">Selección Inteligente</h3>
+          <p class="benefit-card__text">Encuentra el especialista ideal para tus síntomas</p>
+        </article>
+
+        <article class="benefit-card">
+          <div class="benefit-card__icon-wrap benefit-card__icon-wrap--mint">
+            <i class="pi pi-sync" aria-hidden="true" />
+          </div>
+          <h3 class="benefit-card__title">Sincronización Instantánea</h3>
+          <p class="benefit-card__text">Recordatorios, cambios y confirmaciones al instante</p>
+        </article>
       </div>
     </section>
 
@@ -210,93 +253,140 @@ const SPECIALTIES = computed(() => {
 <style scoped>
 /* ===== HERO ===== */
 .hero {
-  background: linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-900) 100%);
-  color: var(--color-surface-0);
+  background: linear-gradient(135deg, #eaf6f6 0%, #f0faf5 40%, #f5f9f0 100%);
   padding: var(--spacing-6) var(--spacing-4);
-  text-align: center;
+  overflow: hidden;
+  position: relative;
 }
 
-@media (min-width: 768px) {
-  .hero { padding: 5rem var(--spacing-6); }
-}
-
-.hero__content {
-  max-width: 48rem;
+.hero__inner {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1fr;
+  align-items: center;
+  gap: var(--spacing-5);
+  max-width: 72rem;
   margin: 0 auto;
+}
+
+/* Assistant column */
+.hero__assistant {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-5);
+  position: relative;
+}
+
+.hero__assistant-img {
+  width: 100%;
+  max-width: 16rem;
+  height: auto;
+  border-radius: var(--radius-full);
+  object-fit: cover;
+  filter: drop-shadow(0 8px 24px rgba(0, 128, 128, 0.15));
+}
+
+.hero__speech-bubble {
+  background-color: var(--color-surface-0);
+  border: 1px solid var(--color-surface-200);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-3) var(--spacing-4);
+  margin-top: calc(-1 * var(--spacing-3));
+  box-shadow: var(--shadow-md);
+  position: relative;
+  max-width: 18rem;
+}
+
+.hero__speech-bubble::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 2rem;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid var(--color-surface-0);
+}
+
+.hero__speech-bubble p {
+  font-size: var(--text-sm);
+  color: var(--color-text-strong);
+  margin: 0;
+  line-height: var(--leading-relaxed);
+}
+
+/* Content column */
+.hero__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
 }
 
 .hero__title {
   font-family: var(--font-heading);
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: var(--font-black);
+  color: var(--color-text-strong);
   line-height: var(--leading-tight);
   margin: 0;
-}
-
-@media (min-width: 768px) {
-  .hero__title { font-size: var(--text-4xl); }
+  letter-spacing: -0.02em;
 }
 
 .hero__title--accent {
-  display: block;
-  color: var(--color-primary-50);
+  color: var(--color-primary-700);
 }
 
 .hero__subtitle {
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
   line-height: var(--leading-relaxed);
-  color: var(--color-primary-100);
-  max-width: 36rem;
   margin: 0;
+  max-width: 36rem;
 }
 
 .hero__actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-3);
-  justify-content: center;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  max-width: 24rem;
 }
 
 .hero__cta {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: var(--spacing-2);
   padding: var(--spacing-3) var(--spacing-5);
-  border: none;
-  border-radius: var(--radius-lg);
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
   font-family: var(--font-body);
+  border-radius: var(--radius-full);
   cursor: pointer;
   transition: all var(--transition-fast);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .hero__cta--primary {
-  background-color: var(--color-surface-0);
-  color: var(--color-primary-700);
+  background: linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-600) 100%);
+  color: var(--color-surface-0);
+  border: none;
+  box-shadow: 0 4px 14px rgba(0, 128, 128, 0.3);
 }
 
 .hero__cta--primary:hover {
-  background-color: var(--color-primary-50);
+  box-shadow: 0 6px 20px rgba(0, 128, 128, 0.4);
+  transform: translateY(-1px);
 }
 
-.hero__cta--secondary {
-  background-color: transparent;
-  color: var(--color-surface-0);
-  border: 1px solid var(--color-primary-100);
+.hero__cta--outline {
+  background: transparent;
+  color: var(--color-text-strong);
+  border: 2px solid var(--color-text-strong);
 }
 
-.hero__cta--secondary:hover:not(:disabled) {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.hero__cta:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.hero__cta--outline:hover {
+  background-color: var(--color-surface-100);
 }
 
 .hero__cta:focus-visible {
@@ -304,30 +394,135 @@ const SPECIALTIES = computed(() => {
   outline-offset: 2px;
 }
 
-.hero__badges {
+/* Illustration column */
+.hero__illustration {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-3);
-  justify-content: center;
-  margin-top: var(--spacing-2);
+  flex-direction: column;
+  align-items: center;
+  position: relative;
 }
 
-.hero__badge {
+.hero__illustration-img {
+  width: 100%;
+  max-width: 18rem;
+  height: auto;
+  border-radius: var(--radius-lg);
+  object-fit: cover;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.1));
+}
+
+.hero__agentic-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px var(--spacing-3);
-  background-color: rgba(255, 255, 255, 0.15);
+  gap: var(--spacing-1);
+  padding: var(--spacing-1) var(--spacing-3);
+  background-color: var(--color-primary-700);
+  color: var(--color-surface-0);
   border-radius: var(--radius-full);
   font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  color: var(--color-primary-50);
+  font-weight: var(--font-bold);
+  letter-spacing: 0.05em;
+  margin-top: var(--spacing-2);
+  box-shadow: 0 2px 8px rgba(0, 128, 128, 0.3);
+}
+
+/* Responsive hero */
+@media (max-width: 900px) {
+  .hero__inner {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .hero__assistant { order: 1; }
+  .hero__content { order: 2; align-items: center; }
+  .hero__illustration { order: 3; }
+  .hero__actions { align-items: center; }
+
+  .hero__speech-bubble {
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+/* ===== BENEFITS ===== */
+.benefits {
+  padding: var(--spacing-6) var(--spacing-4);
+  background-color: var(--color-surface-0);
+}
+
+.benefits__inner {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-4);
+  max-width: 64rem;
+  margin: 0 auto;
+}
+
+.benefit-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-5) var(--spacing-4);
+  background-color: var(--color-surface-50);
+  border-radius: var(--radius-xl);
+  text-align: center;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.benefit-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+}
+
+.benefit-card__icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--radius-full);
+  font-size: var(--text-xl);
+}
+
+.benefit-card__icon-wrap--teal {
+  background-color: rgba(0, 128, 128, 0.12);
+  color: var(--color-primary-700);
+}
+
+.benefit-card__icon-wrap--green {
+  background-color: rgba(34, 139, 34, 0.12);
+  color: #228B22;
+}
+
+.benefit-card__icon-wrap--mint {
+  background-color: rgba(46, 204, 113, 0.12);
+  color: #2ECC71;
+}
+
+.benefit-card__title {
+  font-family: var(--font-heading);
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
+  color: var(--color-text-strong);
+  margin: 0;
+}
+
+.benefit-card__text {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+  line-height: var(--leading-relaxed);
+}
+
+@media (max-width: 700px) {
+  .benefits__inner { grid-template-columns: 1fr; }
 }
 
 /* ===== DIRECTORIO ===== */
 .directory-section {
-  padding: 4rem var(--spacing-4);
-  background-color: var(--color-surface-0);
+  padding: var(--spacing-8) var(--spacing-4);
+  background-color: var(--color-surface-50);
 }
 
 .directory-section__container {
@@ -341,46 +536,38 @@ const SPECIALTIES = computed(() => {
   font-weight: var(--font-bold);
   color: var(--color-text-strong);
   text-align: center;
-  margin: 0 0 var(--spacing-1);
+  margin: 0 0 var(--spacing-2) 0;
 }
 
 .directory-section__subtitle {
   font-size: var(--text-base);
   color: var(--color-text-muted);
   text-align: center;
-  margin: 0 0 var(--spacing-6);
+  margin: 0 0 var(--spacing-6) 0;
 }
 
 .directory-section__grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
   gap: var(--spacing-4);
 }
 
-@media (min-width: 640px) {
-  .directory-section__grid { grid-template-columns: repeat(2, 1fr); }
-}
-
-@media (min-width: 1024px) {
-  .directory-section__grid { grid-template-columns: repeat(3, 1fr); }
-}
-
-/* ===== TARJETA DE DOCTOR ===== */
+/* Doctor card */
 .doc-card {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-3);
-  padding: var(--spacing-5);
+  padding: var(--spacing-4);
   background-color: var(--color-surface-0);
   border: 1px solid var(--color-surface-200);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  transition: all var(--transition-fast);
 }
 
 .doc-card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-lg);
+  border-color: var(--color-primary-500);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
 }
 
 .doc-card__header {
@@ -393,11 +580,11 @@ const SPECIALTIES = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 3.5rem;
-  height: 3.5rem;
+  width: 3rem;
+  height: 3rem;
   border-radius: var(--radius-full);
   color: var(--color-surface-0);
-  font-size: var(--text-lg);
+  font-size: var(--text-sm);
   font-weight: var(--font-bold);
   flex-shrink: 0;
 }
@@ -405,32 +592,25 @@ const SPECIALTIES = computed(() => {
 .doc-card__identity {
   display: flex;
   flex-direction: column;
-  gap: 2px;
 }
 
 .doc-card__name {
-  font-family: var(--font-heading);
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
   color: var(--color-text-strong);
   margin: 0;
 }
 
 .doc-card__specialty {
-  display: inline-block;
-  padding: 2px var(--spacing-2);
-  background-color: var(--color-primary-50);
-  color: var(--color-primary-700);
-  border-radius: var(--radius-full);
   font-size: var(--text-xs);
+  color: var(--color-primary-700);
   font-weight: var(--font-medium);
-  align-self: flex-start;
 }
 
 .doc-card__description {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-  line-height: var(--leading-normal);
+  line-height: var(--leading-relaxed);
   margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -452,30 +632,27 @@ const SPECIALTIES = computed(() => {
   color: var(--color-text-subtle);
 }
 
-.doc-card__detail i {
-  font-size: var(--text-xs);
-  color: var(--color-primary-500);
-}
+.doc-card__detail i { font-size: var(--text-xs); }
 
 .doc-card__footer {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-top: auto;
+  align-items: center;
   padding-top: var(--spacing-3);
-  border-top: 1px solid var(--color-surface-200);
+  border-top: 1px solid var(--color-surface-100);
+  margin-top: auto;
 }
 
 .doc-card__fee {
   font-size: var(--text-base);
   font-weight: var(--font-bold);
-  color: var(--color-text-strong);
+  color: var(--color-primary-700);
 }
 
 .doc-card__fee small {
+  font-weight: var(--font-normal);
   font-size: var(--text-xs);
-  font-weight: var(--font-regular);
-  color: var(--color-text-subtle);
+  color: var(--color-text-muted);
 }
 
 .doc-card__cta {
@@ -485,34 +662,27 @@ const SPECIALTIES = computed(() => {
   border: none;
   border-radius: var(--radius-md);
   font-size: var(--text-xs);
-  font-weight: var(--font-medium);
+  font-weight: var(--font-semibold);
   font-family: var(--font-body);
   cursor: pointer;
   transition: background-color var(--transition-fast);
 }
 
-.doc-card__cta:hover:not(:disabled) {
-  background-color: var(--color-primary-600);
-}
-
-.doc-card__cta:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
+.doc-card__cta:hover:not(:disabled) { background-color: var(--color-primary-600); }
+.doc-card__cta:disabled { opacity: 0.6; cursor: not-allowed; }
 .doc-card__cta:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 
-/* ===== AGENTE (placeholder) ===== */
+/* ===== AGENT SECTION ===== */
 .agent-section {
-  padding: 4rem var(--spacing-4);
-  background-color: var(--color-surface-50);
+  padding: var(--spacing-6) var(--spacing-4);
+  background-color: var(--color-surface-0);
 }
 
 .agent-section__container {
-  max-width: 36rem;
+  max-width: 40rem;
   margin: 0 auto;
 }
 
@@ -520,12 +690,11 @@ const SPECIALTIES = computed(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-4);
-  padding: var(--spacing-6);
-  background-color: var(--color-surface-0);
-  border: 1px solid var(--color-surface-200);
+  gap: var(--spacing-3);
+  padding: var(--spacing-5);
+  background-color: var(--color-surface-50);
+  border: 1px dashed var(--color-surface-200);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
   text-align: center;
 }
 
@@ -533,20 +702,20 @@ const SPECIALTIES = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 4rem;
-  height: 4rem;
-  border-radius: var(--radius-full);
+  width: 3.5rem;
+  height: 3.5rem;
   background-color: var(--color-primary-50);
+  border-radius: var(--radius-full);
 }
 
 .agent-card__icon {
-  font-size: var(--text-2xl);
+  font-size: 1.5rem;
   color: var(--color-primary-700);
 }
 
 .agent-card__title {
   font-family: var(--font-heading);
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
   font-weight: var(--font-bold);
   color: var(--color-text-strong);
   margin: 0;
@@ -555,20 +724,8 @@ const SPECIALTIES = computed(() => {
 .agent-card__text {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-  line-height: var(--leading-normal);
-  max-width: 28rem;
+  line-height: var(--leading-relaxed);
   margin: 0;
-}
-
-.agent-card__badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px var(--spacing-3);
-  background-color: var(--color-warning-50);
-  color: var(--color-warning-800);
-  border-radius: var(--radius-full);
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
 }
 
 .agent-card__list {
@@ -578,7 +735,8 @@ const SPECIALTIES = computed(() => {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
-  align-self: stretch;
+  text-align: left;
+  width: 100%;
 }
 
 .agent-card__list li {
@@ -586,13 +744,12 @@ const SPECIALTIES = computed(() => {
   align-items: center;
   gap: var(--spacing-2);
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  text-align: left;
+  color: var(--color-text-strong);
 }
 
 .agent-card__list li i {
-  color: var(--color-primary-500);
-  flex-shrink: 0;
+  color: var(--color-success-700);
+  font-size: var(--text-xs);
 }
 
 .agent-card__empty {
@@ -601,8 +758,18 @@ const SPECIALTIES = computed(() => {
   align-items: center;
   gap: var(--spacing-2);
   padding-top: var(--spacing-3);
-  border-top: 1px solid var(--color-surface-200);
-  align-self: stretch;
+  border-top: 1px dashed var(--color-surface-200);
+  width: 100%;
+}
+
+.agent-card__badge {
+  display: inline-block;
+  padding: var(--spacing-1) var(--spacing-3);
+  background-color: var(--color-warning-50);
+  color: var(--color-warning-800);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
 }
 
 .agent-card__notice {
@@ -612,17 +779,12 @@ const SPECIALTIES = computed(() => {
 }
 
 .agent-card__link {
-  color: var(--color-primary-600);
-  font-weight: var(--font-medium);
+  color: var(--color-primary-700);
+  font-weight: var(--font-semibold);
   text-decoration: none;
 }
 
 .agent-card__link:hover {
   text-decoration: underline;
-}
-
-.agent-card__link:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
 }
 </style>
