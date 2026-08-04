@@ -13,8 +13,8 @@ import ErrorFallback from '@/components/ui/ErrorFallback.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import { mockAppointments, STATUS_CONFIG, getInitials, getAvatarColor } from '@/lib/mockData';
 import { formatInUserTimezone } from '@/lib/timezone';
-import { validateCancel, getCsrfToken, refundLabel } from '@/lib/appointmentHelpers';
-import type { CancelledAppointment } from '@/types/api.types';
+import { validateCancel, validateReschedule, getCsrfToken, refundLabel } from '@/lib/appointmentHelpers';
+import type { CancelledAppointment, RescheduleResponse } from '@/types/api.types';
 import type { AppointmentDisplay } from '@/lib/mockData';
 
 const t = inject(i18nKey)!;
@@ -155,6 +155,156 @@ async function submitCancel() {
     cancelSubmitting.value = false;
   }
 }
+
+// ── Reprogramación RF-11 Solicitud y Aprobación de Reprogramación ──────
+const rescheduleTarget = ref<AppointmentDisplay | null>(null);
+const rescheduleStart = ref('');
+const rescheduleEnd = ref('');
+const rescheduleReason = ref('');
+const rescheduleSubmitting = ref(false);
+const rescheduleError = ref('');
+const rescheduleResult = ref<RescheduleResponse | null>(null);
+
+function openRescheduleModal(appt: AppointmentDisplay) {
+  rescheduleTarget.value = appt;
+  rescheduleStart.value = '';
+  rescheduleEnd.value = '';
+  rescheduleReason.value = '';
+  rescheduleError.value = '';
+  rescheduleResult.value = null;
+}
+
+function closeRescheduleModal() {
+  rescheduleTarget.value = null;
+}
+
+function onRescheduleStartChange() {
+  if (rescheduleStart.value) {
+    const start = new Date(rescheduleStart.value);
+    const end = new Date(start.getTime() + 30 * 60_000);
+    rescheduleEnd.value = end.toISOString().slice(0, 16);
+  }
+}
+
+async function submitReschedule() {
+  if (!rescheduleTarget.value) return;
+
+  const payload = {
+    requested_start: rescheduleStart.value ? new Date(rescheduleStart.value).toISOString() : '',
+    requested_end: rescheduleEnd.value ? new Date(rescheduleEnd.value).toISOString() : '',
+    reason: rescheduleReason.value,
+  };
+
+  const errs = validateReschedule(payload);
+  if (Object.keys(errs).length > 0) {
+    rescheduleError.value = Object.values(errs).join(' ');
+    return;
+  }
+
+  rescheduleSubmitting.value = true;
+  rescheduleError.value = '';
+
+  try {
+    const res = await fetch(
+      `/api/appointments/${rescheduleTarget.value.id}/reschedule-request`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-XSRF-TOKEN': getCsrfToken(),
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+      },
+    );
+
+    if (res.ok) {
+      rescheduleResult.value = await res.json();
+    } else if (res.status === 409) {
+      rescheduleError.value = 'No se puede reprogramar esta cita en su estado actual.';
+    } else if (res.status === 422) {
+      const json = await res.json();
+      rescheduleError.value = json.message ?? 'Error de validación.';
+    } else {
+      rescheduleError.value = 'Error inesperado. Intenta nuevamente.';
+    }
+  } catch {
+    rescheduleError.value = 'Error de red. Verifica tu conexión.';
+  } finally {
+    rescheduleSubmitting.value = false;
+  }
+}
+
+// ── Acuse de recibo RF-19 Acuse de Recibo de Paciente ──────────────────
+const acknowledgeLoading = ref<string | null>(null);
+const acknowledgeError = ref('');
+
+async function acknowledgeNote(appointmentId: string, consultationId: string) {
+  acknowledgeLoading.value = appointmentId;
+  acknowledgeError.value = '';
+
+  try {
+    const res = await fetch(`/api/consultations/${consultationId}/acknowledge`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'X-XSRF-TOKEN': getCsrfToken(),
+      },
+      credentials: 'same-origin',
+    });
+
+    if (res.ok) {
+      // Marcar la cita como acusada localmente
+      const idx = items.value.findIndex((a) => a.id === appointmentId);
+      if (idx >= 0) {
+        (items.value[idx] as unknown as Record<string, unknown>).acknowledged = true;
+      }
+    } else if (res.status === 422) {
+      acknowledgeError.value = 'La nota aún está en borrador.';
+    } else {
+      acknowledgeError.value = 'Error al acusar recibo.';
+    }
+  } catch {
+    acknowledgeError.value = 'Error de red.';
+  } finally {
+    acknowledgeLoading.value = null;
+  }
+}
+
+// ── Descarga de PDF RF-18 Generación de PDF y QR Clínico ───────────────
+const pdfLoading = ref<string | null>(null);
+const pdfError = ref('');
+
+async function downloadPdf(consultationId: string) {
+  pdfLoading.value = consultationId;
+  pdfError.value = '';
+
+  try {
+    const res = await fetch(`/api/consultations/${consultationId}/pdf`, {
+      headers: { 'Accept': 'application/pdf' },
+      credentials: 'same-origin',
+    });
+
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `nota-clinica-${consultationId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else if (res.status === 425) {
+      pdfError.value = 'El PDF está generándose. Intenta en unos segundos.';
+    } else {
+      pdfError.value = 'Error al descargar el PDF.';
+    }
+  } catch {
+    pdfError.value = 'Error de red.';
+  } finally {
+    pdfLoading.value = null;
+  }
+}
 </script>
 
 <template>
@@ -234,10 +384,29 @@ async function submitCancel() {
           <button
             v-if="appt.status === 'pending' || appt.status === 'confirmed'"
             type="button"
+            class="appt-card__action appt-card__action--reschedule"
+            @click="openRescheduleModal(appt)"
+          >
+            <i class="pi pi-calendar" aria-hidden="true" />
+            Reprogramar
+          </button>
+          <button
+            v-if="appt.status === 'pending' || appt.status === 'confirmed'"
+            type="button"
             class="appt-card__cancel"
             @click="openCancelModal(appt)"
           >
             Cancelar
+          </button>
+          <button
+            v-if="appt.status === 'completed'"
+            type="button"
+            class="appt-card__action appt-card__action--pdf"
+            :disabled="pdfLoading === appt.id"
+            @click="downloadPdf(appt.id)"
+          >
+            <i class="pi pi-file-pdf" aria-hidden="true" />
+            Descargar PDF
           </button>
         </div>
       </div>
@@ -302,6 +471,73 @@ async function submitCancel() {
               <template v-else>
                 <i class="pi pi-times" aria-hidden="true" />
                 Confirmar Cancelación
+              </template>
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Modal de reprogramación RF-11 -->
+    <div v-if="rescheduleTarget" class="cancel-overlay" @click.self="closeRescheduleModal">
+      <div class="cancel-modal" role="dialog" aria-labelledby="reschedule-modal-title">
+        <!-- Resultado exitoso -->
+        <div v-if="rescheduleResult" class="cancel-modal__success">
+          <i class="pi pi-check-circle cancel-modal__success-icon" aria-hidden="true" />
+          <h3>¡Solicitud Enviada!</h3>
+          <p>Tu médico revisará la solicitud de reprogramación.</p>
+          <p class="cancel-modal__refund-text">ID de solicitud: {{ rescheduleResult.id }}</p>
+          <button type="button" class="cancel-modal__close-btn" @click="closeRescheduleModal">Cerrar</button>
+        </div>
+        <!-- Formulario -->
+        <template v-else>
+          <h2 id="reschedule-modal-title" class="cancel-modal__title">
+            <i class="pi pi-calendar" aria-hidden="true" />
+            Reprogramar Cita
+          </h2>
+          <p class="cancel-modal__desc">Selecciona un nuevo horario para tu cita.</p>
+
+          <div class="cancel-modal__field">
+            <label for="reschedule-start" class="cancel-modal__label">Nueva Fecha y Hora</label>
+            <input
+              id="reschedule-start"
+              v-model="rescheduleStart"
+              type="datetime-local"
+              class="cancel-modal__input"
+              @change="onRescheduleStartChange"
+            />
+          </div>
+
+          <div class="cancel-modal__field">
+            <label for="reschedule-reason" class="cancel-modal__label">Motivo de reprogramación</label>
+            <textarea
+              id="reschedule-reason"
+              v-model="rescheduleReason"
+              class="cancel-modal__textarea"
+              rows="3"
+              placeholder="Ej: Cambio de turno laboral"
+            />
+          </div>
+
+          <p v-if="rescheduleError" class="cancel-modal__error" role="alert">
+            <i class="pi pi-exclamation-circle" aria-hidden="true" />
+            {{ rescheduleError }}
+          </p>
+
+          <div class="cancel-modal__actions">
+            <button type="button" class="cancel-modal__btn cancel-modal__btn--outline" @click="closeRescheduleModal">
+              Volver
+            </button>
+            <button
+              type="button"
+              class="cancel-modal__btn cancel-modal__btn--primary"
+              :disabled="rescheduleSubmitting || !rescheduleStart || !rescheduleReason"
+              @click="submitReschedule"
+            >
+              <i v-if="rescheduleSubmitting" class="pi pi-spin pi-spinner" aria-hidden="true" />
+              <template v-else>
+                <i class="pi pi-calendar" aria-hidden="true" />
+                Enviar Solicitud
               </template>
             </button>
           </div>
@@ -492,6 +728,48 @@ async function submitCancel() {
 .appt-card__cancel:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
+}
+
+.appt-card__action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: 2px var(--spacing-2);
+  background: none;
+  border: 1px solid var(--color-surface-300);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.appt-card__action:hover:not(:disabled) {
+  background-color: var(--color-surface-100);
+}
+
+.appt-card__action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.appt-card__action--reschedule {
+  border-color: var(--color-primary-400);
+  color: var(--color-primary-700);
+}
+
+.appt-card__action--reschedule:hover {
+  background-color: var(--color-primary-50);
+}
+
+.appt-card__action--pdf {
+  border-color: var(--color-success-400);
+  color: var(--color-success-700);
+}
+
+.appt-card__action--pdf:hover:not(:disabled) {
+  background-color: var(--color-success-50);
 }
 
 @media (max-width: 640px) {
