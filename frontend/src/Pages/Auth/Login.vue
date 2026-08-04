@@ -11,6 +11,8 @@
 import { computed } from 'vue';
 import LandingLayout from '@/layouts/LandingLayout.vue';
 import { useForm } from '@inertiajs/vue3';
+import { validateLoginClient, CREDENTIAL_ERROR } from '@/lib/loginValidation';
+import type { LoginValidationErrors } from '@/lib/loginValidation';
 
 // ---------------------------------------------------------------------------
 // Inertia form — Es una navegación, no un fetch.
@@ -29,46 +31,16 @@ const form = useForm({
 //   password → required | string
 //
 // La validación del cliente NO reemplaza al servidor. Las dos existen.
+// Lógica extraída a lib/loginValidation.ts para ser testeable.
 // ---------------------------------------------------------------------------
-interface ValidationErrors {
-  email?: string;
-  password?: string;
-}
-
-function validateClient(): ValidationErrors {
-  const errs: ValidationErrors = {};
-
-  if (!form.email.trim()) {
-    errs.email = 'El correo electrónico es obligatorio.';
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-    errs.email = 'Ingresa un correo electrónico válido.';
-  }
-
-  if (!form.password) {
-    errs.password = 'La contraseña es obligatoria.';
-  }
-
-  return errs;
-}
 
 // ---------------------------------------------------------------------------
 // Estados del formulario:
 //  - idle:        formulario sin interacción
-//  - validating:  validación client-side falló (errores locales visibles)
 //  - processing:  enviando al servidor (form.processing)
 //  - error:       el servidor devolvió errores (form.hasErrors)
 //  - success:     login exitoso (form.recentlySuccessful)
 // ---------------------------------------------------------------------------
-
-
-/**
- * Mensaje de error de credenciales genérico.
- * NUNCA revela si el correo existe. El mismo texto para:
- * - correo inexistente
- * - contraseña incorrecta
- * - cuenta bloqueada
- */
-const CREDENTIAL_ERROR = 'Las credenciales ingresadas no son válidas. Verifica tu correo y contraseña.';
 
 /**
  * Error genérico del servidor, mapeado a texto seguro.
@@ -80,17 +52,15 @@ const serverError = computed<string | null>(() => {
   return CREDENTIAL_ERROR;
 });
 
-
-
-let localErrors: ValidationErrors = {};
+let localErrors: LoginValidationErrors = {};
 
 function handleSubmit() {
   // 1. Validación client-side
-  localErrors = validateClient();
+  localErrors = validateLoginClient(form.email, form.password);
   if (Object.keys(localErrors).length > 0) {
     // Forzar la reactividad copiando al form.setError
     for (const [key, value] of Object.entries(localErrors)) {
-      form.setError(key as keyof typeof localErrors, value!);
+      form.setError(key as keyof LoginValidationErrors, value!);
     }
     return;
   }
@@ -111,6 +81,8 @@ function handleSubmit() {
     },
   });
 }
+
+
 </script>
 
 <template>
