@@ -32,12 +32,6 @@ final class AuthController extends Controller
 
     /**
      * Procesar intento de autenticación.
-     *
-     * Delegación limpia: el controlador valida las entradas HTTP y llama a
-     * Auth::attempt(). La verificación del hash y la consulta a PostgreSQL
-     * (fn_user_for_auth) suceden dentro de SecureEloquentUserProvider.
-     *
-     * Incluye RateLimiter (máximo 5 intentos por minuto por email+IP).
      */
     public function store(Request $request): RedirectResponse
     {
@@ -58,6 +52,11 @@ final class AuthController extends Controller
             ]);
         }
 
+        $userForContext = \App\Models\User::on('pgsql_migration')->where('email', strtolower(trim($credentials['email'])))->first();
+        if ($userForContext) {
+            DB::statement("SET app.current_user_id = '{$userForContext->id}'");
+        }
+
         if (!Auth::attempt($credentials, $request->boolean('remember'))) {
             RateLimiter::hit($throttleKey, 60);
             throw ValidationException::withMessages([
@@ -71,20 +70,13 @@ final class AuthController extends Controller
         $user = Auth::user();
         if ($user) {
             DB::statement("SET app.current_user_id = '{$user->id}'");
-            if (in_array($user->role, ['admin', 'doctor', 'agent'], true)) {
-                return redirect()->intended('/admin');
-            }
         }
 
-        return redirect()->intended('/');
+        return redirect()->intended('/admin');
     }
 
     /**
      * Destruir la sesión autenticada (Logout).
-     *
-     * Al cerrar sesión, si hay usuario autenticado, invocamos
-     * fn_rotate_remember_token() en PostgreSQL para invalidar
-     * cualquier cookie de persistencia previa.
      */
     public function destroy(Request $request): RedirectResponse
     {

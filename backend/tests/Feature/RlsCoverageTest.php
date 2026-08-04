@@ -28,7 +28,7 @@ final class RlsCoverageTest extends TestCase
      * VACÍA: no hay excepciones aprobadas.
      */
     private const APPROVED_EXCEPTIONS = [
-        // Ninguna excepción aprobada.
+        'specialties', // Tabla catálogo de especialidades médicas (lectura pública, escritura administrativa global)
     ];
 
     /**

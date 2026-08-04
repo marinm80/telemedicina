@@ -353,3 +353,302 @@ para evitar condición de carrera verificar-y-después-escribir.
     }
   }
   ```
+
+---
+
+## 4. Contratos de Props de Páginas Inertia
+
+En la arquitectura Inertia.js + Vue 3, las `props` pasadas desde los controladores a `Inertia::render('ViewName', $props)` constituyen un **contrato estricto de tipado y seguridad**. Los controladores obtienen los datos directamente mediante Actions o consultas SQL/Eloquent ejecutadas bajo el contexto RLS del usuario autenticado (`SET app.current_user_id` / `SET app.current_user_role`).
+
+---
+
+### 4.1 `Directory` (`Pages/Clinical/Directory.vue`)
+*Vista pública/autenticada del catálogo de médicos especialistas.*
+
+* **Ruta Web:** `GET /directory`
+* **Controller:** `App\Http\Controllers\Clinical\DirectoryController@index`
+* **Origen de Datos:** Vista PostgreSQL `v_doctor_directory` + tabla `specialties`.
+* **Definición de Props (TypeScript):**
+  ```typescript
+  interface SpecialtyOption {
+    id: string;
+    name: string;
+    description: string;
+  }
+
+  interface DoctorItem {
+    user_id: string;
+    doctor_profile_id: string;
+    name: string;
+    last_name: string;
+    timezone: string;
+    consultation_fee: number;
+    description: string;
+    years_experience: number;
+    university: string;
+    specialties: string[];
+  }
+
+  interface DirectoryProps {
+    specialties: SpecialtyOption[];
+    doctors: {
+      data: DoctorItem[];
+      current_page: number;
+      last_page: number;
+      total: number;
+    };
+    filters: {
+      specialty_id?: string;
+      search?: string;
+    };
+  }
+  ```
+* **Consulta SQL / Action:**
+  - `specialties`: `SELECT id, name, description FROM specialties WHERE is_active = true ORDER BY name ASC`
+  - `doctors`: `SELECT user_id, doctor_profile_id, name, last_name, timezone, consultation_fee, description, years_experience, university FROM v_doctor_directory` filtrando por `specialty_id` o `search` si aplican.
+
+---
+
+### 4.2 `MyAppointments` (`Pages/Appointments/MyAppointments.vue`)
+*Historial y lista de citas médicas del usuario autenticado.*
+
+* **Ruta Web:** `GET /appointments`
+* **Controller:** `App\Http\Controllers\Appointments\AppointmentController@index`
+* **Origen de Datos:** Tabla `appointments` con JOIN en `users` y `doctor_profiles` / `patient_profiles` (filtrado automático por RLS según el rol activo).
+* **Definición de Props (TypeScript):**
+  ```typescript
+  interface AppointmentItem {
+    id: string;
+    patient_id: string;
+    patient_name: string;
+    doctor_id: string;
+    doctor_name: string;
+    specialty_name?: string;
+    franja_start: string; // ISO 8601 UTC
+    franja_end: string;   // ISO 8601 UTC
+    status: 'pending' | 'confirmed' | 'completed' | 'cancelled';
+    cancelled_by?: string;
+    cancellation_reason?: string;
+    consultation_id?: string;
+    can_cancel: boolean;
+    can_reschedule: boolean;
+  }
+
+  interface MyAppointmentsProps {
+    appointments: AppointmentItem[];
+    filters: {
+      status?: string;
+    };
+  }
+  ```
+* **Consulta SQL / Action:**
+  - `SELECT a.id, a.patient_id, u_pat.name || ' ' || u_pat.last_name AS patient_name, a.doctor_id, u_doc.name || ' ' || u_doc.last_name AS doctor_name, lower(a.franja) AS franja_start, upper(a.franja) AS franja_end, a.status FROM appointments a JOIN users u_pat ON u_pat.id = a.patient_id JOIN users u_doc ON u_doc.id = a.doctor_id ORDER BY lower(a.franja) DESC`.
+
+---
+
+### 4.3 `BookingWizard` (`Pages/Appointments/BookingWizard.vue`)
+*Flujo paso a paso de agendamiento de cita por parte de pacientes o agentes.*
+
+* **Ruta Web:** `GET /booking/{doctorProfileId}`
+* **Controller:** `App\Http\Controllers\Appointments\BookingController@create`
+* **Origen de Datos:** `v_doctor_directory` + Acción de disponibilidad (`GetDoctorSlotsAction`).
+* **Definición de Props (TypeScript):**
+  ```typescript
+  interface AvailableSlot {
+    start: string;       // ISO UTC
+    end: string;         // ISO UTC
+    local_start: string; // e.g. "09:00 AM"
+    local_end: string;   // e.g. "09:30 AM"
+    available: boolean;
+  }
+
+  interface BookingWizardProps {
+    doctor: {
+      user_id: string;
+      doctor_profile_id: string;
+      name: string;
+      last_name: string;
+      consultation_fee: number;
+      university: string;
+      specialties: string[];
+    };
+    selected_date: string; // YYYY-MM-DD
+    available_slots: AvailableSlot[];
+  }
+  ```
+* **Consulta SQL / Action:**
+  - `doctor`: `v_doctor_directory` filtrado por `doctor_profile_id`.
+  - `available_slots`: Calculados mediante `GetDoctorSlotsAction` para la fecha `selected_date`.
+
+---
+
+### 4.4 `AgendaManager` (`Pages/Appointments/AgendaManager.vue`)
+*Panel de administración de franjas recurrentes y bloqueos del médico.*
+
+* **Ruta Web:** `GET /agenda`
+* **Controller:** `App\Http\Controllers\Appointments\AgendaController@index`
+* **Origen de Datos:** `doctor_profiles`, `schedules` y `schedule_blocks` (filtrados por RLS `user_id = app.current_user_id`).
+* **Definición de Props (TypeScript):**
+  ```typescript
+  interface RecurringScheduleItem {
+    id: string;
+    day_of_week: number; // 0-6
+    start_time: string;  // e.g. "09:00"
+    end_time: string;    // e.g. "17:00"
+    slot_duration: number;
+  }
+
+  interface ScheduleBlockItem {
+    id: string;
+    blocked_date: string; // YYYY-MM-DD
+    start_time: string;   // e.g. "14:00"
+    end_time: string;     // e.g. "16:00"
+    reason?: string;
+  }
+
+  interface AgendaManagerProps {
+    doctor_profile: {
+      id: string;
+      status: 'pending' | 'approved' | 'rejected';
+      rejection_reason?: string;
+    };
+    schedules: RecurringScheduleItem[];
+    schedule_blocks: ScheduleBlockItem[];
+  }
+  ```
+* **Consulta SQL / Action:**
+  - `doctor_profile`: `SELECT id, status, rejection_reason FROM doctor_profiles WHERE user_id = current_setting('app.current_user_id')`
+  - `schedules`: `SELECT id, day_of_week, lower(franja)::text AS start_time, upper(franja)::text AS end_time, slot_duration FROM schedules WHERE doctor_profile_id = :dpId AND deleted_at IS NULL`
+  - `schedule_blocks`: `SELECT id, blocked_date, lower(franja)::text AS start_time, upper(franja)::text AS end_time, reason FROM schedule_blocks WHERE doctor_profile_id = :dpId`
+
+---
+
+### 4.5 `ConsultationRoom` (`Pages/Clinical/ConsultationRoom.vue`)
+*Pantalla de telemedicina en vivo con expediente longitudinal y notas SOAP.*
+
+* **Ruta Web:** `GET /consultation/{appointmentId}`
+* **Controller:** `App\Http\Controllers\Clinical\ConsultationRoomController@show`
+* **Origen de Datos:** `appointments`, `consultations`, `patient_profiles`, `patient_allergies`, `patient_conditions`, `patient_medications`, `consultation_notes`.
+* **Definición de Props (TypeScript):**
+  ```typescript
+  interface AllergyItem {
+    id: string;
+    name: string;
+    type: string;
+    severity: string;
+    is_confirmed: boolean;
+  }
+
+  interface ConditionItem {
+    id: string;
+    name: string;
+    onset_date: string;
+    status: string;
+  }
+
+  interface MedicationItem {
+    id: string;
+    name: string;
+    dosage: string;
+    frequency: string;
+  }
+
+  interface PastConsultationSummary {
+    id: string;
+    date: string;
+    doctor_name: string;
+    diagnosis_summary: string;
+  }
+
+  interface SOAPNote {
+    id?: string;
+    symptoms: string;
+    objective: string;
+    analysis: string;
+    plan: string;
+    status: 'draft' | 'firmada';
+    signed_at?: string;
+    sha256_hash?: string;
+  }
+
+  interface ConsultationRoomProps {
+    appointment: {
+      id: string;
+      patient_id: string;
+      patient_name: string;
+      doctor_id: string;
+      doctor_name: string;
+      status: string;
+      franja_start: string;
+      franja_end: string;
+    };
+    consultation: {
+      id: string;
+      started_at?: string;
+      ended_at?: string;
+    };
+    patient_file: {
+      phone: string;
+      date_of_birth: string;
+      gender: string;
+      address: string;
+      allergies: AllergyItem[];
+      conditions: ConditionItem[];
+      medications: MedicationItem[];
+      past_consultations: PastConsultationSummary[];
+    };
+    soap_note: SOAPNote;
+  }
+  ```
+
+---
+
+### 4.6 Dashboard Específicos por Rol (Decisión de Arquitectura)
+
+#### `PatientDashboard` (`Pages/Dashboard/PatientDashboard.vue`)
+* **Ruta Web:** `GET /dashboard/patient` (o `/admin` si rol es patient)
+* **Props:**
+  ```typescript
+  interface PatientDashboardProps {
+    upcoming_appointments: AppointmentItem[];
+    past_consultations_count: number;
+    active_prescriptions_count: number;
+  }
+  ```
+
+#### `DoctorDashboard` (`Pages/Dashboard/DoctorDashboard.vue`)
+* **Ruta Web:** `GET /dashboard/doctor` (o `/admin` si rol es doctor)
+* **Props:**
+  ```typescript
+  interface DoctorDashboardProps {
+    today_appointments: AppointmentItem[];
+    pending_notes_count: number;
+    profile_status: 'pending' | 'approved' | 'rejected';
+    month_earnings: number;
+  }
+  ```
+
+#### `AgentDashboard` (`Pages/Dashboard/AgentDashboard.vue`)
+* **Ruta Web:** `GET /dashboard/agent` (o `/admin` si rol es agent)
+* **Props:**
+  ```typescript
+  interface AgentDashboardProps {
+    pending_appointments_count: number;
+    unassigned_requests_count: number;
+    active_doctors_count: number;
+    recent_appointments: AppointmentItem[];
+  }
+  ```
+
+#### `AdminDashboard` (`Pages/Dashboard/AdminDashboard.vue`)
+* **Ruta Web:** `GET /dashboard/admin` (o `/admin` si rol es admin)
+* **Props:**
+  ```typescript
+  interface AdminDashboardProps {
+    total_users: number;
+    pending_doctor_approvals: number;
+    monthly_appointments_count: number;
+    total_revenue: number;
+  }
+  ```
+

@@ -132,6 +132,14 @@ const PAIRS = [
   // WCAG 1.4.11 aplica a "componentes de UI y objetos gráficos", no a
   // divisores decorativos que no transmiten información. Umbral 1:1.
   { fg: 'color-surface-200', bg: 'color-surface-0',   type: 'decorative', label: 'Separador decorativo / blanco' },
+
+  // --- Familia Clinical ---
+  { fg: 'color-clinical-accent', bg: 'color-surface-0', type: 'text', label: 'Clinical accent / blanco' },
+  { fg: 'color-clinical-danger', bg: 'color-surface-0', type: 'text', label: 'Clinical danger / blanco' },
+  { fg: 'color-clinical-warning', bg: 'color-surface-0', type: 'text', label: 'Clinical warning / blanco' },
+  { fg: 'color-surface-0', bg: 'color-clinical-warning', type: 'text', label: 'Blanco / clinical warning' },
+  { fg: 'color-clinical-warning', bg: 'color-clinical-warning-bg', type: 'text', label: 'Clinical warning / background' },
+  { fg: 'color-clinical-danger', bg: 'color-clinical-danger-bg', type: 'text', label: 'Clinical danger / background' },
 ];
 
 // ---------------------------------------------------------------------------

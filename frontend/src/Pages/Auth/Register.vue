@@ -1,88 +1,52 @@
 <!--
   ====================================================================
-  Register — Registro de Usuario
+  Register — Creación de Cuenta para Pacientes
   AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
   ====================================================================
-  Registro autónomo de pacientes (PRD §3).
-  Los médicos también se registran aquí pero quedan en status 'pending'
-  hasta aprobación por admin.
+  Formulario de Inertia (navegación, no mutación de API).
+  Validación client-side que espeja las reglas del servidor.
 -->
 <script setup lang="ts">
-import { ref, inject, computed } from 'vue';
 import LandingLayout from '@/layouts/LandingLayout.vue';
-import { i18nKey } from '@/i18n/plugin';
-import type { UserRole } from '@/types/auth.types';
+import { useForm } from '@inertiajs/vue3';
+import { validateRegisterClient } from '@/lib/registerValidation';
+import type { RegisterValidationErrors } from '@/lib/registerValidation';
 
-const t = inject(i18nKey)!;
-
-type RegisterRole = Extract<UserRole, 'patient' | 'doctor'>;
-
-const form = ref({
+const form = useForm({
   name: '',
   last_name: '',
   email: '',
   password: '',
   password_confirmation: '',
-  role: 'patient' as RegisterRole,
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
 });
 
-const errors = ref<Record<string, string>>({});
-const isSubmitting = ref(false);
-
-const ROLES: { id: RegisterRole; label: string; description: string; icon: string }[] = [
-  {
-    id: 'patient',
-    label: 'Paciente',
-    description: 'Busca y reserva citas con especialistas',
-    icon: 'pi-user',
-  },
-  {
-    id: 'doctor',
-    label: 'Médico',
-    description: 'Ofrece consultas y gestiona tu agenda',
-    icon: 'pi-briefcase',
-  },
-];
-
-function validate(): boolean {
-  errors.value = {};
-
-  if (!form.value.name.trim()) {
-    errors.value.name = 'El nombre es obligatorio.';
-  }
-  if (!form.value.last_name.trim()) {
-    errors.value.last_name = 'El apellido es obligatorio.';
-  }
-  if (!form.value.email.trim()) {
-    errors.value.email = 'El correo electrónico es obligatorio.';
-  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.value.email)) {
-    errors.value.email = 'Ingresa un correo electrónico válido.';
-  }
-  if (!form.value.password) {
-    errors.value.password = 'La contraseña es obligatoria.';
-  } else if (form.value.password.length < 8) {
-    errors.value.password = 'La contraseña debe tener al menos 8 caracteres.';
-  }
-  if (form.value.password !== form.value.password_confirmation) {
-    errors.value.password_confirmation = 'Las contraseñas no coinciden.';
-  }
-
-  return Object.keys(errors.value).length === 0;
-}
+let localErrors: RegisterValidationErrors = {};
 
 function handleSubmit() {
-  if (!validate()) return;
+  localErrors = validateRegisterClient(
+    form.name,
+    form.last_name,
+    form.email,
+    form.password,
+    form.password_confirmation
+  );
 
-  isSubmitting.value = true;
+  if (Object.keys(localErrors).length > 0) {
+    for (const [key, value] of Object.entries(localErrors)) {
+      form.setError(key as keyof RegisterValidationErrors, value!);
+    }
+    return;
+  }
 
-  // TODO: Inertia router.post('/register', form.value)
-  setTimeout(() => {
-    isSubmitting.value = false;
-  }, 1500);
+  form.clearErrors();
+
+  form.post('/register', {
+    onFinish: () => {
+      form.reset('password', 'password_confirmation');
+    },
+  });
 }
-
-const detectedTimezone = computed(() => form.value.timezone);
 </script>
 
 <template>
@@ -91,166 +55,142 @@ const detectedTimezone = computed(() => form.value.timezone);
       <div class="auth-card">
         <div class="auth-card__header">
           <div class="auth-card__logo">
-            <i class="pi pi-heart-fill" aria-hidden="true" />
+            <i class="pi pi-user-plus" aria-hidden="true" />
           </div>
-          <h1 class="auth-card__title">Crear Cuenta</h1>
+          <h1 class="auth-card__title">Crear Cuenta de Paciente</h1>
           <p class="auth-card__subtitle">
-            Regístrate para acceder a la plataforma de telemedicina
+            Regístrate para agendar tus consultas médicas online
           </p>
         </div>
 
-        <form class="auth-form" @submit.prevent="handleSubmit" novalidate>
-          <!-- Selector de rol -->
-          <div class="role-selector">
-            <span class="auth-form__label">Tipo de cuenta</span>
-            <div class="role-selector__options">
-              <label
-                v-for="role in ROLES"
-                :key="role.id"
-                :class="['role-option', { 'role-option--active': form.role === role.id }]"
-              >
-                <input
-                  type="radio"
-                  :value="role.id"
-                  v-model="form.role"
-                  class="role-option__radio"
-                />
-                <i :class="['pi', role.icon, 'role-option__icon']" aria-hidden="true" />
-                <span class="role-option__label">{{ role.label }}</span>
-                <span class="role-option__description">{{ role.description }}</span>
-              </label>
-            </div>
-          </div>
+        <!-- Alerta de Éxito -->
+        <div v-if="form.recentlySuccessful" class="auth-alert auth-alert--success" role="status">
+          <i class="pi pi-check-circle" aria-hidden="true" />
+          <span>¡Cuenta creada con éxito! Iniciando sesión…</span>
+        </div>
 
+        <form class="auth-form" @submit.prevent="handleSubmit" novalidate>
           <!-- Nombre y Apellido -->
           <div class="auth-form__row">
             <div class="auth-form__field">
               <label class="auth-form__label" for="reg-name">Nombre</label>
-              <input
-                id="reg-name"
-                v-model="form.name"
-                type="text"
-                class="auth-form__input"
-                :class="{ 'auth-form__input--error': errors.name }"
-                placeholder="Juan"
-                autocomplete="given-name"
-              />
-              <span v-if="errors.name" class="auth-form__error">
-                {{ errors.name }}
-              </span>
+              <div class="auth-form__input-wrapper">
+                <i class="pi pi-user auth-form__input-icon" aria-hidden="true" />
+                <input
+                  id="reg-name"
+                  v-model="form.name"
+                  type="text"
+                  class="auth-form__input"
+                  :class="{ 'auth-form__input--error': form.errors.name }"
+                  placeholder="Juan"
+                  autocomplete="given-name"
+                  :disabled="form.processing"
+                  @input="form.clearErrors('name')"
+                />
+              </div>
+              <span v-if="form.errors.name" class="auth-form__error">{{ form.errors.name }}</span>
             </div>
+
             <div class="auth-form__field">
-              <label class="auth-form__label" for="reg-lastname">Apellido</label>
-              <input
-                id="reg-lastname"
-                v-model="form.last_name"
-                type="text"
-                class="auth-form__input"
-                :class="{ 'auth-form__input--error': errors.last_name }"
-                placeholder="Pérez"
-                autocomplete="family-name"
-              />
-              <span v-if="errors.last_name" class="auth-form__error">
-                {{ errors.last_name }}
-              </span>
+              <label class="auth-form__label" for="reg-last-name">Apellido</label>
+              <div class="auth-form__input-wrapper">
+                <i class="pi pi-user auth-form__input-icon" aria-hidden="true" />
+                <input
+                  id="reg-last-name"
+                  v-model="form.last_name"
+                  type="text"
+                  class="auth-form__input"
+                  :class="{ 'auth-form__input--error': form.errors.last_name }"
+                  placeholder="Pérez"
+                  autocomplete="family-name"
+                  :disabled="form.processing"
+                  @input="form.clearErrors('last_name')"
+                />
+              </div>
+              <span v-if="form.errors.last_name" class="auth-form__error">{{ form.errors.last_name }}</span>
             </div>
           </div>
 
-          <!-- Email -->
+          <!-- Correo Electrónico -->
           <div class="auth-form__field">
-            <label class="auth-form__label" for="reg-email">
-              Correo electrónico
-            </label>
+            <label class="auth-form__label" for="reg-email">Correo Electrónico</label>
             <div class="auth-form__input-wrapper">
               <i class="pi pi-envelope auth-form__input-icon" aria-hidden="true" />
               <input
                 id="reg-email"
                 v-model="form.email"
                 type="email"
-                class="auth-form__input auth-form__input--with-icon"
-                :class="{ 'auth-form__input--error': errors.email }"
+                class="auth-form__input"
+                :class="{ 'auth-form__input--error': form.errors.email }"
                 placeholder="tu@email.com"
                 autocomplete="email"
+                :disabled="form.processing"
+                @input="form.clearErrors('email')"
               />
             </div>
-            <span v-if="errors.email" class="auth-form__error">
-              {{ errors.email }}
-            </span>
+            <span v-if="form.errors.email" class="auth-form__error">{{ form.errors.email }}</span>
           </div>
 
           <!-- Contraseña -->
           <div class="auth-form__field">
-            <label class="auth-form__label" for="reg-password">
-              Contraseña
-            </label>
+            <label class="auth-form__label" for="reg-password">Contraseña</label>
             <div class="auth-form__input-wrapper">
               <i class="pi pi-lock auth-form__input-icon" aria-hidden="true" />
               <input
                 id="reg-password"
                 v-model="form.password"
                 type="password"
-                class="auth-form__input auth-form__input--with-icon"
-                :class="{ 'auth-form__input--error': errors.password }"
+                class="auth-form__input"
+                :class="{ 'auth-form__input--error': form.errors.password }"
                 placeholder="Mínimo 8 caracteres"
                 autocomplete="new-password"
+                :disabled="form.processing"
+                @input="form.clearErrors('password')"
               />
             </div>
-            <span v-if="errors.password" class="auth-form__error">
-              {{ errors.password }}
-            </span>
+            <span v-if="form.errors.password" class="auth-form__error">{{ form.errors.password }}</span>
           </div>
 
-          <!-- Confirmar contraseña -->
+          <!-- Confirmar Contraseña -->
           <div class="auth-form__field">
-            <label class="auth-form__label" for="reg-confirm">
-              Confirmar contraseña
-            </label>
+            <label class="auth-form__label" for="reg-password-confirm">Confirmar Contraseña</label>
             <div class="auth-form__input-wrapper">
-              <i class="pi pi-lock auth-form__input-icon" aria-hidden="true" />
+              <i class="pi pi-lock-open auth-form__input-icon" aria-hidden="true" />
               <input
-                id="reg-confirm"
+                id="reg-password-confirm"
                 v-model="form.password_confirmation"
                 type="password"
-                class="auth-form__input auth-form__input--with-icon"
-                :class="{ 'auth-form__input--error': errors.password_confirmation }"
+                class="auth-form__input"
+                :class="{ 'auth-form__input--error': form.errors.password_confirmation }"
                 placeholder="Repite tu contraseña"
                 autocomplete="new-password"
+                :disabled="form.processing"
+                @input="form.clearErrors('password_confirmation')"
               />
             </div>
-            <span v-if="errors.password_confirmation" class="auth-form__error">
-              {{ errors.password_confirmation }}
+            <span v-if="form.errors.password_confirmation" class="auth-form__error">
+              {{ form.errors.password_confirmation }}
             </span>
           </div>
 
-          <!-- Timezone detectado -->
-          <div class="auth-form__timezone">
-            <i class="pi pi-globe" aria-hidden="true" />
-            <span>Zona horaria detectada: <strong>{{ detectedTimezone }}</strong></span>
-          </div>
-
-          <!-- Doctor warning -->
-          <div v-if="form.role === 'doctor'" class="auth-form__notice">
-            <i class="pi pi-info-circle" aria-hidden="true" />
-            <span>
-              Las cuentas médicas requieren verificación. Tu perfil quedará en
-              estado <strong>pendiente</strong> hasta revisión del administrador.
-            </span>
-          </div>
-
+          <!-- Botón de Registro -->
           <button
             type="submit"
             class="auth-form__submit"
-            :disabled="isSubmitting"
+            :disabled="form.processing"
           >
-            <i v-if="isSubmitting" class="pi pi-spin pi-spinner" aria-hidden="true" />
-            <template v-else>Crear Cuenta</template>
+            <i v-if="form.processing" class="pi pi-spin pi-spinner" aria-hidden="true" />
+            <template v-else>
+              <i class="pi pi-check-circle" aria-hidden="true" />
+              Crear mi Cuenta
+            </template>
           </button>
         </form>
 
         <div class="auth-card__footer">
           <p class="auth-card__link-text">
-            ¿Ya tienes cuenta?
-            <a href="/login" class="auth-card__link">Inicia sesión</a>
+            ¿Ya tienes una cuenta?
+            <a href="/login" class="auth-card__link">Inicia sesión aquí</a>
           </p>
         </div>
       </div>
@@ -269,7 +209,7 @@ const detectedTimezone = computed(() => form.value.timezone);
 
 .auth-card {
   width: 100%;
-  max-width: 30rem;
+  max-width: 28rem;
   background-color: var(--color-surface-0);
   border: 1px solid var(--color-surface-200);
   border-radius: var(--radius-lg);
@@ -282,7 +222,7 @@ const detectedTimezone = computed(() => form.value.timezone);
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-2);
-  padding: var(--spacing-5) var(--spacing-6) var(--spacing-4);
+  padding: var(--spacing-6) var(--spacing-6) var(--spacing-4);
   background: linear-gradient(135deg, var(--color-primary-700) 0%, var(--color-primary-900) 100%);
   color: var(--color-surface-0);
 }
@@ -310,6 +250,16 @@ const detectedTimezone = computed(() => form.value.timezone);
   color: var(--color-primary-100);
   text-align: center;
   margin: 0;
+}
+
+.auth-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-4);
+  font-size: var(--text-sm);
+  background-color: var(--color-success-50);
+  color: var(--color-success-800);
 }
 
 .auth-form {
@@ -352,7 +302,7 @@ const detectedTimezone = computed(() => form.value.timezone);
 
 .auth-form__input {
   width: 100%;
-  padding: var(--spacing-2) var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-4) var(--spacing-2) 2.5rem;
   border: 1px solid var(--color-surface-200);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
@@ -360,10 +310,6 @@ const detectedTimezone = computed(() => form.value.timezone);
   color: var(--color-text-strong);
   background-color: var(--color-surface-0);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.auth-form__input--with-icon {
-  padding-left: 2.5rem;
 }
 
 .auth-form__input:focus {
@@ -379,99 +325,6 @@ const detectedTimezone = computed(() => form.value.timezone);
 .auth-form__error {
   font-size: var(--text-xs);
   color: var(--color-error-700);
-}
-
-/* Role selector */
-.role-selector {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2);
-}
-
-.role-selector__options {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-2);
-}
-
-.role-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: var(--spacing-3);
-  border: 2px solid var(--color-surface-200);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  text-align: center;
-}
-
-.role-option:hover {
-  border-color: var(--color-primary-500);
-  background-color: var(--color-primary-50);
-}
-
-.role-option--active {
-  border-color: var(--color-primary-700);
-  background-color: var(--color-primary-50);
-}
-
-.role-option__radio {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.role-option__icon {
-  font-size: var(--text-xl);
-  color: var(--color-primary-700);
-}
-
-.role-option__label {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--color-text-strong);
-}
-
-.role-option__description {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  line-height: var(--leading-tight);
-}
-
-/* Timezone */
-.auth-form__timezone {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-3);
-  background-color: var(--color-surface-100);
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.auth-form__timezone i {
-  color: var(--color-primary-500);
-}
-
-/* Doctor notice */
-.auth-form__notice {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--spacing-2);
-  padding: var(--spacing-3);
-  background-color: var(--color-warning-50);
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  color: var(--color-warning-800);
-  line-height: var(--leading-normal);
-}
-
-.auth-form__notice i {
-  flex-shrink: 0;
-  margin-top: 2px;
 }
 
 .auth-form__submit {
@@ -491,6 +344,7 @@ const detectedTimezone = computed(() => form.value.timezone);
   justify-content: center;
   gap: var(--spacing-2);
   min-height: 2.75rem;
+  margin-top: var(--spacing-2);
 }
 
 .auth-form__submit:hover:not(:disabled) {
@@ -500,11 +354,6 @@ const detectedTimezone = computed(() => form.value.timezone);
 .auth-form__submit:disabled {
   opacity: 0.7;
   cursor: not-allowed;
-}
-
-.auth-form__submit:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
 }
 
 .auth-card__footer {
@@ -529,8 +378,9 @@ const detectedTimezone = computed(() => form.value.timezone);
   text-decoration: underline;
 }
 
-.auth-card__link:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
+@media (max-width: 520px) {
+  .auth-form__row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

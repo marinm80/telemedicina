@@ -3,11 +3,11 @@
 ## Deuda declarada — Pendientes
 
 > [!NOTE]
-> Register.vue sigue pendiente de migración a `useForm` hasta que exista `POST /register`.
+> Register.vue fue migrado a `useForm` de Inertia en la sesión anterior tras habilitarse la ruta en el backend.
 
-| Página | Qué falta | Cuándo |
-|---|---|---|
-| `Register.vue` | Migrar a `useForm` de Inertia | Cuando exista `POST /register` y su contrato |
+| Página | Qué falta | Cuándo | Perfil |
+|---|---|---|---|
+| `Login.vue` | Mostrar credenciales de demostración directamente en la vista de login para permitir el acceso evaluativo fácil. | Cuando el backend entregue el seeder de base de datos. | `PORTAFOLIO` |
 
 ---
 

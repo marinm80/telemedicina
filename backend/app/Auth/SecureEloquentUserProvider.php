@@ -113,11 +113,12 @@ final class SecureEloquentUserProvider extends EloquentUserProvider
     {
         // Laravel llama esto con $token = null al logout (borrar cookie).
         // En ese caso no rotamos — no hay cookie que actualizar.
-        // El GRANT columna impide que app_runtime escriba NULL directamente,
-        // y la función requiere app.current_user_id definido.
         if ($token === null || $token === '') {
             return;
         }
+
+        // Garantizar el contexto RLS de usuario antes de invocar la rotación
+        DB::statement("SET app.current_user_id = '{$user->getAuthIdentifier()}'");
 
         $row = DB::selectOne('SELECT fn_rotate_remember_token()');
 

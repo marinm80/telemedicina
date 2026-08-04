@@ -50,6 +50,12 @@ Route::middleware([SetPostgresSessionContext::class])->group(function () {
     // 9. Asistente Conversacional (RF-23 / RF-24)
     Route::post('/assistant/public', [\App\Http\Controllers\Api\AssistantController::class, 'publicAssistant']);
     Route::post('/assistant/clinical', [\App\Http\Controllers\Api\AssistantController::class, 'clinicalAssistant']);
+    
+    Route::middleware('guest')->group(function () {
+        Route::post('/login', [\App\Http\Controllers\Auth\AuthController::class, 'store']);
+        Route::post('/register', [\App\Http\Controllers\Auth\RegisterController::class, 'storeApi']);
+    });
+
     Route::post('/schedules', [\App\Http\Controllers\Api\ScheduleController::class, 'storeSchedule']);
     Route::delete('/schedules/{id}', [\App\Http\Controllers\Api\ScheduleController::class, 'destroySchedule']);
     Route::post('/schedule-blocks', [\App\Http\Controllers\Api\ScheduleController::class, 'storeBlock']);
