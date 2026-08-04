@@ -3,40 +3,113 @@
   Login — Inicio de Sesión
   AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
   ====================================================================
+  Formulario de Inertia (navegación, no mutación de API).
+  Validación client-side que ESPEJA las reglas del servidor.
+  El mensaje de error de credenciales no revela si el correo existe.
 -->
 <script setup lang="ts">
-import { ref, inject } from 'vue';
+import { computed } from 'vue';
 import LandingLayout from '@/layouts/LandingLayout.vue';
-import { i18nKey } from '@/i18n/plugin';
+import { useForm } from '@inertiajs/vue3';
 
-const t = inject(i18nKey)!;
-
-const form = ref({
+// ---------------------------------------------------------------------------
+// Inertia form — Es una navegación, no un fetch.
+// useForm maneja processing, errors, recentlySuccessful, wasSuccessful.
+// ---------------------------------------------------------------------------
+const form = useForm({
   email: '',
   password: '',
 });
 
-const errors = ref<Record<string, string>>({});
-const isSubmitting = ref(false);
+// ---------------------------------------------------------------------------
+// Validación CLIENT-SIDE — espeja las reglas del LoginRequest del servidor.
+//
+// Reglas del servidor (LoginRequest):
+//   email    → required | string | email
+//   password → required | string
+//
+// La validación del cliente NO reemplaza al servidor. Las dos existen.
+// ---------------------------------------------------------------------------
+interface ValidationErrors {
+  email?: string;
+  password?: string;
+}
+
+function validateClient(): ValidationErrors {
+  const errs: ValidationErrors = {};
+
+  if (!form.email.trim()) {
+    errs.email = 'El correo electrónico es obligatorio.';
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+    errs.email = 'Ingresa un correo electrónico válido.';
+  }
+
+  if (!form.password) {
+    errs.password = 'La contraseña es obligatoria.';
+  }
+
+  return errs;
+}
+
+// ---------------------------------------------------------------------------
+// Estados del formulario:
+//  - idle:        formulario sin interacción
+//  - validating:  validación client-side falló (errores locales visibles)
+//  - processing:  enviando al servidor (form.processing)
+//  - error:       el servidor devolvió errores (form.hasErrors)
+//  - success:     login exitoso (form.recentlySuccessful)
+// ---------------------------------------------------------------------------
+
+
+/**
+ * Mensaje de error de credenciales genérico.
+ * NUNCA revela si el correo existe. El mismo texto para:
+ * - correo inexistente
+ * - contraseña incorrecta
+ * - cuenta bloqueada
+ */
+const CREDENTIAL_ERROR = 'Las credenciales ingresadas no son válidas. Verifica tu correo y contraseña.';
+
+/**
+ * Error genérico del servidor, mapeado a texto seguro.
+ * El servidor puede devolver "These credentials do not match our records"
+ * en form.errors.email — lo reemplazamos con CREDENTIAL_ERROR.
+ */
+const serverError = computed<string | null>(() => {
+  if (!form.hasErrors) return null;
+  return CREDENTIAL_ERROR;
+});
+
+
+
+let localErrors: ValidationErrors = {};
 
 function handleSubmit() {
-  errors.value = {};
-
-  if (!form.value.email.trim()) {
-    errors.value.email = 'El correo electrónico es obligatorio.';
+  // 1. Validación client-side
+  localErrors = validateClient();
+  if (Object.keys(localErrors).length > 0) {
+    // Forzar la reactividad copiando al form.setError
+    for (const [key, value] of Object.entries(localErrors)) {
+      form.setError(key as keyof typeof localErrors, value!);
+    }
+    return;
   }
-  if (!form.value.password) {
-    errors.value.password = 'La contraseña es obligatoria.';
-  }
 
-  if (Object.keys(errors.value).length > 0) return;
+  // 2. Limpiar errores previos
+  form.clearErrors();
 
-  isSubmitting.value = true;
-
-  // TODO: Inertia router.post('/login', form.value)
-  setTimeout(() => {
-    isSubmitting.value = false;
-  }, 1500);
+  // 3. Enviar — Es navegación, no fetch
+  form.post('/login', {
+    onError: () => {
+      // El servidor devuelve errores en form.errors
+      // Los reemplazamos con el mensaje genérico en el template
+      // No hacer nada extra aquí — serverError computed se encarga
+    },
+    onFinish: () => {
+      // Siempre limpiar la contraseña después de un intento
+      form.reset('password');
+    },
+  });
 }
 </script>
 
@@ -54,6 +127,18 @@ function handleSubmit() {
           </p>
         </div>
 
+        <!-- Error genérico de credenciales (del servidor) -->
+        <div v-if="serverError && !form.processing" class="auth-alert auth-alert--error" role="alert">
+          <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+          <span>{{ serverError }}</span>
+        </div>
+
+        <!-- Éxito -->
+        <div v-if="form.recentlySuccessful" class="auth-alert auth-alert--success" role="status">
+          <i class="pi pi-check-circle" aria-hidden="true" />
+          <span>Inicio de sesión exitoso. Redirigiendo…</span>
+        </div>
+
         <form class="auth-form" @submit.prevent="handleSubmit" novalidate>
           <div class="auth-form__field">
             <label class="auth-form__label" for="login-email">
@@ -66,13 +151,15 @@ function handleSubmit() {
                 v-model="form.email"
                 type="email"
                 class="auth-form__input"
-                :class="{ 'auth-form__input--error': errors.email }"
+                :class="{ 'auth-form__input--error': form.errors.email }"
                 placeholder="tu@email.com"
                 autocomplete="email"
+                :disabled="form.processing"
+                @input="form.clearErrors('email')"
               />
             </div>
-            <span v-if="errors.email" class="auth-form__error">
-              {{ errors.email }}
+            <span v-if="form.errors.email && !serverError" class="auth-form__error">
+              {{ form.errors.email }}
             </span>
           </div>
 
@@ -87,23 +174,28 @@ function handleSubmit() {
                 v-model="form.password"
                 type="password"
                 class="auth-form__input"
-                :class="{ 'auth-form__input--error': errors.password }"
+                :class="{ 'auth-form__input--error': form.errors.password }"
                 placeholder="••••••••"
                 autocomplete="current-password"
+                :disabled="form.processing"
+                @input="form.clearErrors('password')"
               />
             </div>
-            <span v-if="errors.password" class="auth-form__error">
-              {{ errors.password }}
+            <span v-if="form.errors.password && !serverError" class="auth-form__error">
+              {{ form.errors.password }}
             </span>
           </div>
 
           <button
             type="submit"
             class="auth-form__submit"
-            :disabled="isSubmitting"
+            :disabled="form.processing"
           >
-            <i v-if="isSubmitting" class="pi pi-spin pi-spinner" aria-hidden="true" />
-            <template v-else>Iniciar Sesión</template>
+            <i v-if="form.processing" class="pi pi-spin pi-spinner" aria-hidden="true" />
+            <template v-else>
+              <i class="pi pi-sign-in" aria-hidden="true" />
+              Iniciar Sesión
+            </template>
           </button>
         </form>
 
@@ -172,6 +264,30 @@ function handleSubmit() {
   margin: 0;
 }
 
+/* Alert banners (error / success) */
+.auth-alert {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-4);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.auth-alert--error {
+  background-color: var(--color-error-100);
+  color: var(--color-error-700);
+}
+
+.auth-alert--success {
+  background-color: var(--color-success-50);
+  color: var(--color-success-800);
+}
+
+.auth-alert i {
+  flex-shrink: 0;
+}
+
 .auth-form {
   display: flex;
   flex-direction: column;
@@ -228,6 +344,11 @@ function handleSubmit() {
 
 .auth-form__input--error:focus {
   box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
+}
+
+.auth-form__input:disabled {
+  background-color: var(--color-surface-100);
+  cursor: not-allowed;
 }
 
 .auth-form__error {

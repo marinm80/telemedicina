@@ -157,23 +157,50 @@ const SPECIALTIES = computed(() => {
       </div>
     </section>
 
-    <!-- ===== AGENTE CONVERSACIONAL (placeholder) ===== -->
+    <!-- ===== ASISTENTE INFORMATIVO — estado vacío honesto ===== -->
+    <!--
+      Este es el LUGAR donde irá el asistente informativo.
+      NO simula conversación. Un asistente falso que parece real
+      es peor que un espacio declarado.
+
+      Cuando exista, el asistente:
+      - Explica las especialidades disponibles
+      - Guía al visitante hacia el registro
+      - Informa que para agendar hay que iniciar sesión
+      - NO escribe nada — no es un chatbot clínico
+    -->
     <section class="agent-section">
       <div class="agent-section__container">
         <div class="agent-card">
           <div class="agent-card__icon-wrapper">
-            <i class="pi pi-comments agent-card__icon" aria-hidden="true" />
+            <i class="pi pi-info-circle agent-card__icon" aria-hidden="true" />
           </div>
-          <h2 class="agent-card__title">Asistente Virtual</h2>
+          <h2 class="agent-card__title">Asistente Informativo</h2>
           <p class="agent-card__text">
-            Próximamente podrás consultar con nuestro asistente inteligente para
-            orientarte sobre especialidades, horarios y preparación para tu cita.
+            Aquí podrás consultar información sobre nuestras especialidades,
+            horarios de atención y cómo prepararte para tu cita.
           </p>
-          <span class="agent-card__badge">Próximamente</span>
-          <button type="button" class="agent-card__cta" disabled>
-            <i class="pi pi-comments" aria-hidden="true" />
-            Iniciar conversación
-          </button>
+          <ul class="agent-card__list">
+            <li>
+              <i class="pi pi-check" aria-hidden="true" />
+              Orientación sobre especialidades médicas
+            </li>
+            <li>
+              <i class="pi pi-check" aria-hidden="true" />
+              Guía para crear tu cuenta
+            </li>
+            <li>
+              <i class="pi pi-check" aria-hidden="true" />
+              Información sobre el proceso de reserva
+            </li>
+          </ul>
+          <div class="agent-card__empty">
+            <span class="agent-card__badge">En desarrollo</span>
+            <p class="agent-card__notice">
+              Para agendar una cita, <a href="/register" class="agent-card__link">crea tu cuenta</a>
+              o <a href="/login" class="agent-card__link">inicia sesión</a>.
+            </p>
+          </div>
         </div>
       </div>
     </section>
@@ -544,25 +571,57 @@ const SPECIALTIES = computed(() => {
   font-weight: var(--font-semibold);
 }
 
-.agent-card__cta {
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--color-primary-700);
-  color: var(--color-surface-0);
-  border: none;
-  border-radius: var(--radius-md);
+.agent-card__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  align-self: stretch;
+}
+
+.agent-card__list li {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
   font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-align: left;
+}
+
+.agent-card__list li i {
+  color: var(--color-primary-500);
+  flex-shrink: 0;
+}
+
+.agent-card__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding-top: var(--spacing-3);
+  border-top: 1px solid var(--color-surface-200);
+  align-self: stretch;
+}
+
+.agent-card__notice {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.agent-card__link {
+  color: var(--color-primary-600);
   font-weight: var(--font-medium);
-  font-family: var(--font-body);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
+  text-decoration: none;
 }
 
-.agent-card__cta:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.agent-card__link:hover {
+  text-decoration: underline;
 }
 
-.agent-card__cta:focus-visible {
+.agent-card__link:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }

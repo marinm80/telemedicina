@@ -17,7 +17,7 @@
 
       <!-- Empty State -->
       <div v-else-if="isEmpty" class="consultation__empty">
-        <EmptyState title="Sin consulta activa" description="No hay paciente asignado para este horario." />
+        <EmptyState message="Sin consulta activa. No hay paciente asignado para este horario." />
       </div>
 
       <!-- Ready State -->
@@ -235,9 +235,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, nextTick, watch, inject } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import SpinnerLoader from '@/components/common/SpinnerLoader.vue';
-import ErrorFallback from '@/components/common/ErrorFallback.vue';
-import EmptyState from '@/components/common/EmptyState.vue';
+import SpinnerLoader from '@/components/ui/SpinnerLoader.vue';
+import ErrorFallback from '@/components/ui/ErrorFallback.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
 
 // Mock dependencies injection to bypass potential missing items
 const translate = inject('i18nKey', (key: string) => '') as (key: string) => string;
