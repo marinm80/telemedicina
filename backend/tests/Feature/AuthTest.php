@@ -106,7 +106,7 @@ final class AuthTest extends TestCase
 
         DB::statement("SET app.current_user_id = '{$patientId}'");
         DB::statement("SET app.current_user_role = 'patient'");
-        $patientUser = User::find($patientId);
+        $patientUser = User::on('pgsql_migration')->find($patientId);
         $this->assertAuthenticatedAs($patientUser);
 
         // Aislamiento RLS en consultas tras el login
@@ -242,7 +242,7 @@ final class AuthTest extends TestCase
         // Iniciar sesión y luego hacer logout
         DB::statement("SET app.current_user_id = '{$userId}'");
         DB::statement("SET app.current_user_role = 'patient'");
-        $userObj = User::find($userId);
+        $userObj = User::on('pgsql_migration')->find($userId);
 
         $this->actingAs($userObj);
         $resLogout = $this->post('/logout');
@@ -277,10 +277,11 @@ final class AuthTest extends TestCase
         ]);
         $resThrottled->assertStatus(302);
         $resThrottled->assertSessionHasErrors('email');
-        
-        $errorMessage = session('errors')->get('email')[0];
+
+        $errorMessage = session('errors')->get('email');
+        $errorStr = is_array($errorMessage) ? $errorMessage[0] : (string) $errorMessage;
         $this->assertTrue(
-            str_contains($errorMessage, 'seconds') || str_contains($errorMessage, 'segundos') || str_contains($errorMessage, 'Too many'),
+            str_contains($errorStr, 'seconds') || str_contains($errorStr, 'segundos') || str_contains($errorStr, 'Too many'),
             'Debe contener mensaje de limitación de tasa (throttle)'
         );
     }

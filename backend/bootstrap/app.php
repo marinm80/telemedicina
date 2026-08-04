@@ -1,11 +1,7 @@
 <?php
 declare(strict_types=1);
-/**
- * ====================================================================
- * PLATAFORMA DE TELEMEDICINA
- * AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
- * ====================================================================
- */
+
+namespace App\Bootstrap;
 
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -20,9 +16,16 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(prepend: [
+            \App\Http\Middleware\SetPostgresSessionContext::class,
+        ]);
+
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
-            \App\Http\Middleware\SetPostgresSessionContext::class,
+        ]);
+
+        $middleware->alias([
+            'role' => \App\Http\Middleware\EnsureUserRole::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

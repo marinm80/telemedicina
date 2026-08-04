@@ -9,12 +9,12 @@
  * necesita importar para tener todo el sistema de diseño cargado.
  */
 
+@import './tokens.css';
+@import './typography.css';
+
 @import "tailwindcss/base";
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
-
-@import './tokens.css';
-@import './typography.css';
 
 /* === RESET MÍNIMO === */
 

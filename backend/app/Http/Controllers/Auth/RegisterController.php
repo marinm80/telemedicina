@@ -6,12 +6,12 @@ namespace App\Http\Controllers\Auth;
 use App\Actions\Auth\RegisterPatientAction;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 final class RegisterController extends Controller
 {
@@ -26,7 +26,7 @@ final class RegisterController extends Controller
     /**
      * Procesar solicitud de registro desde el formulario Inertia.
      */
-    public function store(Request $request, RegisterPatientAction $action): RedirectResponse
+    public function store(Request $request, RegisterPatientAction $action): SymfonyResponse
     {
         $validated = $request->validate([
             'name'                  => ['required', 'string', 'max:150'],
@@ -45,7 +45,7 @@ final class RegisterController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
-        return redirect()->intended('/admin');
+        return Inertia::location('/admin');
     }
 
     /**
