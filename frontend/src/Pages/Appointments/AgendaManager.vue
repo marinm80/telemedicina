@@ -1,101 +1,312 @@
 <!--
   ====================================================================
-  AgendaManager — Configuración de Agenda (Médico)
+  AgendaManager — RF-08 Configuración de Agenda y Bloqueos
   AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
   ====================================================================
-  El médico configura sus bloques de disponibilidad semanal.
-  Modo simulado con datos mock.
+  Dos recursos del contrato real:
+    1. Franjas recurrentes: POST/DELETE /api/schedules
+    2. Bloqueos puntuales:  POST/DELETE /api/schedule-blocks
+
+  Mutaciones individuales via fetch (API REST, no navegación Inertia).
+  Los datos iniciales llegan como props de Inertia desde el controlador.
+
+  Validación client-side espeja las reglas del controlador:
+    schedules:  day_of_week (1-7), inicio (H:i:s), fin (H:i:s, after:inicio), slot_duration (10-120)
+    blocks:     blocked_date (Y-m-d), inicio (H:i:s), fin (H:i:s, after:inicio), reason (max 255)
 -->
 <script setup lang="ts">
-import { ref, computed, inject } from 'vue';
+import { ref, computed } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { i18nKey } from '@/i18n/plugin';
+import type {
+  Schedule,
+  ScheduleBlock,
+  DeleteScheduleResult,
+  ScheduleValidationErrors,
+  BlockValidationErrors,
+} from '@/lib/scheduleHelpers';
+import {
+  parseFranja,
+  timeToApi,
+  validateSchedule,
+  validateBlock,
+  DAYS,
+} from '@/lib/scheduleHelpers';
 
-const t = inject(i18nKey)!;
+// ── Props de Inertia (datos iniciales del controlador) ─────────────────
+const props = withDefaults(
+  defineProps<{
+    schedules?: Schedule[];
+    blocks?: ScheduleBlock[];
+  }>(),
+  {
+    schedules: () => [],
+    blocks: () => [],
+  },
+);
 
-interface TimeBlock {
-  id: string;
-  day: number;         // 0=Domingo, 1=Lunes, ..., 6=Sábado
-  start_time: string;  // HH:MM
-  end_time: string;    // HH:MM
-  slot_duration: number; // minutos
-}
+// ── Estado local ───────────────────────────────────────────────────────
+const schedules = ref<Schedule[]>([...props.schedules]);
+const blocks = ref<ScheduleBlock[]>([...props.blocks]);
 
-const DAYS = [
-  { id: 1, label: 'Lunes', short: 'Lun' },
-  { id: 2, label: 'Martes', short: 'Mar' },
-  { id: 3, label: 'Miércoles', short: 'Mié' },
-  { id: 4, label: 'Jueves', short: 'Jue' },
-  { id: 5, label: 'Viernes', short: 'Vie' },
-  { id: 6, label: 'Sábado', short: 'Sáb' },
-];
+type ActiveTab = 'schedules' | 'blocks';
+const activeTab = ref<ActiveTab>('schedules');
 
-const blocks = ref<TimeBlock[]>([
-  { id: 'b1', day: 1, start_time: '08:00', end_time: '12:00', slot_duration: 30 },
-  { id: 'b2', day: 1, start_time: '14:00', end_time: '17:00', slot_duration: 30 },
-  { id: 'b3', day: 3, start_time: '09:00', end_time: '13:00', slot_duration: 30 },
-  { id: 'b4', day: 5, start_time: '08:00', end_time: '11:00', slot_duration: 30 },
-]);
-
-const isSaving = ref(false);
-const showAddForm = ref(false);
-
-const newBlock = ref({
-  day: 1,
-  start_time: '08:00',
-  end_time: '12:00',
+// ── Formulario de nueva franja ─────────────────────────────────────────
+const showScheduleForm = ref(false);
+const scheduleForm = ref({
+  day_of_week: 1,
+  inicio: '08:00',
+  fin: '12:00',
   slot_duration: 30,
 });
+const scheduleFormErrors = ref<ScheduleValidationErrors>({});
+const scheduleSubmitting = ref(false);
 
-function blocksForDay(dayId: number): TimeBlock[] {
-  return blocks.value.filter((b) => b.day === dayId);
+// ── Formulario de nuevo bloqueo ────────────────────────────────────────
+const showBlockForm = ref(false);
+const blockForm = ref({
+  blocked_date: '',
+  inicio: '09:00',
+  fin: '11:00',
+  reason: '',
+});
+const blockFormErrors = ref<BlockValidationErrors>({});
+const blockSubmitting = ref(false);
+
+// ── Estado global de errores/éxito ─────────────────────────────────────
+const alertMessage = ref('');
+const alertType = ref<'error' | 'success' | 'warning'>('success');
+const isDeleting = ref<string | null>(null);
+
+// ── Confirmación de borrado con citas afectadas ────────────────────────
+const deleteConfirm = ref<{
+  id: string;
+  result: DeleteScheduleResult;
+} | null>(null);
+
+// ── Computed ───────────────────────────────────────────────────────────
+function schedulesForDay(dayId: number): Schedule[] {
+  return schedules.value.filter((s) => s.day_of_week === dayId);
 }
 
-function totalHoursPerWeek(): string {
+const totalHoursPerWeek = computed(() => {
   let minutes = 0;
-  for (const block of blocks.value) {
-    const [sh, sm] = block.start_time.split(':').map(Number);
-    const [eh, em] = block.end_time.split(':').map(Number);
-    minutes += (eh * 60 + em) - (sh * 60 + sm);
+  for (const s of schedules.value) {
+    try {
+      const { inicio, fin } = parseFranja(s.franja);
+      const [sh, sm] = inicio.split(':').map(Number);
+      const [eh, em] = fin.split(':').map(Number);
+      minutes += (eh * 60 + em) - (sh * 60 + sm);
+    } catch {
+      // franja inválida — ignorar para el cálculo
+    }
   }
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-}
+});
 
-function totalSlotsPerWeek(): number {
+const totalSlotsPerWeek = computed(() => {
   let total = 0;
-  for (const block of blocks.value) {
-    const [sh, sm] = block.start_time.split(':').map(Number);
-    const [eh, em] = block.end_time.split(':').map(Number);
-    const duration = (eh * 60 + em) - (sh * 60 + sm);
-    total += Math.floor(duration / block.slot_duration);
+  for (const s of schedules.value) {
+    try {
+      const { inicio, fin } = parseFranja(s.franja);
+      const [sh, sm] = inicio.split(':').map(Number);
+      const [eh, em] = fin.split(':').map(Number);
+      const duration = (eh * 60 + em) - (sh * 60 + sm);
+      total += Math.floor(duration / s.slot_duration);
+    } catch {
+      // franja inválida — ignorar
+    }
   }
   return total;
+});
+
+// ── Helpers de display ─────────────────────────────────────────────────
+function displayFranja(franja: string): string {
+  try {
+    const { inicio, fin } = parseFranja(franja);
+    return `${inicio} – ${fin}`;
+  } catch {
+    return franja;
+  }
 }
 
-function addBlock() {
-  const id = `b${Date.now()}`;
-  blocks.value.push({
-    id,
-    day: newBlock.value.day,
-    start_time: newBlock.value.start_time,
-    end_time: newBlock.value.end_time,
-    slot_duration: newBlock.value.slot_duration,
-  });
-  showAddForm.value = false;
+function dayLabel(dayId: number): string {
+  return DAYS.find((d) => d.id === dayId)?.label ?? `Día ${dayId}`;
 }
 
-function removeBlock(id: string) {
-  blocks.value = blocks.value.filter((b) => b.id !== id);
+function showAlert(message: string, type: 'error' | 'success' | 'warning') {
+  alertMessage.value = message;
+  alertType.value = type;
+  setTimeout(() => { alertMessage.value = ''; }, 5000);
 }
 
-function saveAgenda() {
-  isSaving.value = true;
-  // TODO: Inertia router.put('/api/schedule', blocks.value)
-  setTimeout(() => {
-    isSaving.value = false;
-  }, 1000);
+// ── Crear franja recurrente ────────────────────────────────────────────
+async function createSchedule() {
+  const errs = validateSchedule(scheduleForm.value);
+  scheduleFormErrors.value = errs;
+  if (Object.keys(errs).length > 0) return;
+
+  scheduleSubmitting.value = true;
+  try {
+    const res = await fetch('/api/schedules', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-XSRF-TOKEN': getCsrfToken(),
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        day_of_week: scheduleForm.value.day_of_week,
+        inicio: timeToApi(scheduleForm.value.inicio),
+        fin: timeToApi(scheduleForm.value.fin),
+        slot_duration: scheduleForm.value.slot_duration,
+      }),
+    });
+
+    if (res.status === 201) {
+      const json = await res.json();
+      schedules.value.push(json.data);
+      showScheduleForm.value = false;
+      showAlert('Franja creada correctamente.', 'success');
+    } else if (res.status === 409) {
+      const json = await res.json();
+      showAlert(json.message, 'error');
+    } else if (res.status === 422) {
+      const json = await res.json();
+      scheduleFormErrors.value = json.errors ?? {};
+    } else if (res.status === 403) {
+      const json = await res.json();
+      showAlert(json.message, 'error');
+    } else {
+      showAlert('Error inesperado al crear la franja.', 'error');
+    }
+  } catch {
+    showAlert('Error de red. Verifica tu conexión.', 'error');
+  } finally {
+    scheduleSubmitting.value = false;
+  }
+}
+
+// ── Eliminar franja recurrente ─────────────────────────────────────────
+async function deleteSchedule(id: string) {
+  isDeleting.value = id;
+  try {
+    const res = await fetch(`/api/schedules/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+        'X-XSRF-TOKEN': getCsrfToken(),
+      },
+      credentials: 'same-origin',
+    });
+
+    if (res.ok) {
+      const json: DeleteScheduleResult = await res.json();
+      if (json.affected_appointments_count > 0) {
+        deleteConfirm.value = { id, result: json };
+      }
+      schedules.value = schedules.value.filter((s) => s.id !== id);
+      if (json.affected_appointments_count === 0) {
+        showAlert('Franja eliminada.', 'success');
+      }
+    } else if (res.status === 404) {
+      showAlert('Franja no encontrada.', 'error');
+    } else if (res.status === 403) {
+      const json = await res.json();
+      showAlert(json.message, 'error');
+    }
+  } catch {
+    showAlert('Error de red al eliminar.', 'error');
+  } finally {
+    isDeleting.value = null;
+  }
+}
+
+// ── Crear bloqueo puntual ──────────────────────────────────────────────
+async function createBlock() {
+  const errs = validateBlock(blockForm.value);
+  blockFormErrors.value = errs;
+  if (Object.keys(errs).length > 0) return;
+
+  blockSubmitting.value = true;
+  try {
+    const res = await fetch('/api/schedule-blocks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-XSRF-TOKEN': getCsrfToken(),
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        blocked_date: blockForm.value.blocked_date,
+        inicio: timeToApi(blockForm.value.inicio),
+        fin: timeToApi(blockForm.value.fin),
+        reason: blockForm.value.reason,
+      }),
+    });
+
+    if (res.status === 201) {
+      const json = await res.json();
+      blocks.value.push(json.data);
+      showBlockForm.value = false;
+      blockForm.value = { blocked_date: '', inicio: '09:00', fin: '11:00', reason: '' };
+      showAlert('Bloqueo creado correctamente.', 'success');
+    } else if (res.status === 409) {
+      const json = await res.json();
+      showAlert(json.message, 'error');
+    } else if (res.status === 422) {
+      const json = await res.json();
+      blockFormErrors.value = json.errors ?? {};
+    } else if (res.status === 403) {
+      const json = await res.json();
+      showAlert(json.message, 'error');
+    } else {
+      showAlert('Error inesperado al crear el bloqueo.', 'error');
+    }
+  } catch {
+    showAlert('Error de red. Verifica tu conexión.', 'error');
+  } finally {
+    blockSubmitting.value = false;
+  }
+}
+
+// ── Eliminar bloqueo puntual ───────────────────────────────────────────
+async function deleteBlock(id: string) {
+  isDeleting.value = id;
+  try {
+    const res = await fetch(`/api/schedule-blocks/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Accept': 'application/json',
+        'X-XSRF-TOKEN': getCsrfToken(),
+      },
+      credentials: 'same-origin',
+    });
+
+    if (res.ok) {
+      blocks.value = blocks.value.filter((b) => b.id !== id);
+      showAlert('Bloqueo eliminado.', 'success');
+    } else if (res.status === 404) {
+      showAlert('Bloqueo no encontrado.', 'error');
+    } else if (res.status === 403) {
+      const json = await res.json();
+      showAlert(json.message, 'error');
+    }
+  } catch {
+    showAlert('Error de red al eliminar.', 'error');
+  } finally {
+    isDeleting.value = null;
+  }
+}
+
+// ── CSRF ───────────────────────────────────────────────────────────────
+function getCsrfToken(): string {
+  const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : '';
 }
 </script>
 
@@ -103,117 +314,281 @@ function saveAgenda() {
   <AppLayout>
     <div class="agenda">
       <header class="agenda__header">
-        <div class="agenda__title-row">
-          <h1 class="agenda__title">Mi Agenda</h1>
-          <button type="button" class="agenda__save" :disabled="isSaving" @click="saveAgenda">
-            <i v-if="isSaving" class="pi pi-spin pi-spinner" aria-hidden="true" />
-            <template v-else>
-              <i class="pi pi-save" aria-hidden="true" />
-              Guardar Cambios
-            </template>
-          </button>
-        </div>
+        <h1 class="agenda__title">Mi Agenda</h1>
         <p class="agenda__subtitle">
-          Configura tus bloques de atención semanal. Los pacientes solo podrán
-          reservar en los horarios que definas aquí.
+          Configura tus franjas de atención semanal y bloquea fechas puntuales.
         </p>
       </header>
+
+      <!-- Alert banner -->
+      <div
+        v-if="alertMessage"
+        :class="['agenda__alert', `agenda__alert--${alertType}`]"
+        role="alert"
+      >
+        <i
+          :class="[
+            'pi',
+            alertType === 'error' ? 'pi-exclamation-triangle' :
+            alertType === 'warning' ? 'pi-info-circle' :
+            'pi-check-circle'
+          ]"
+          aria-hidden="true"
+        />
+        <span>{{ alertMessage }}</span>
+      </div>
+
+      <!-- Affected appointments warning -->
+      <div v-if="deleteConfirm" class="agenda__alert agenda__alert--warning" role="alert">
+        <i class="pi pi-info-circle" aria-hidden="true" />
+        <div>
+          <strong>Franja eliminada.</strong>
+          {{ deleteConfirm.result.affected_appointments_count }}
+          cita(s) futura(s) afectada(s) que ya estaban en esa franja.
+          <button type="button" class="agenda__dismiss" @click="deleteConfirm = null">
+            Entendido
+          </button>
+        </div>
+      </div>
 
       <!-- Stats -->
       <div class="agenda__stats">
         <div class="stat">
-          <span class="stat__value">{{ blocks.length }}</span>
-          <span class="stat__label">Bloques</span>
+          <span class="stat__value">{{ schedules.length }}</span>
+          <span class="stat__label">Franjas</span>
         </div>
         <div class="stat">
-          <span class="stat__value">{{ totalHoursPerWeek() }}</span>
+          <span class="stat__value">{{ totalHoursPerWeek }}</span>
           <span class="stat__label">Horas / semana</span>
         </div>
         <div class="stat">
-          <span class="stat__value">{{ totalSlotsPerWeek() }}</span>
+          <span class="stat__value">{{ totalSlotsPerWeek }}</span>
           <span class="stat__label">Slots / semana</span>
+        </div>
+        <div class="stat">
+          <span class="stat__value">{{ blocks.length }}</span>
+          <span class="stat__label">Bloqueos</span>
         </div>
       </div>
 
-      <!-- Weekly view -->
-      <div class="week-grid">
-        <div v-for="day in DAYS" :key="day.id" class="day-col">
-          <h3 class="day-col__title">{{ day.label }}</h3>
+      <!-- Tabs -->
+      <div class="tabs">
+        <button
+          type="button"
+          :class="['tabs__btn', { 'tabs__btn--active': activeTab === 'schedules' }]"
+          @click="activeTab = 'schedules'"
+        >
+          <i class="pi pi-calendar" aria-hidden="true" />
+          Franjas Recurrentes
+        </button>
+        <button
+          type="button"
+          :class="['tabs__btn', { 'tabs__btn--active': activeTab === 'blocks' }]"
+          @click="activeTab = 'blocks'"
+        >
+          <i class="pi pi-ban" aria-hidden="true" />
+          Bloqueos Puntuales
+        </button>
+      </div>
 
-          <div v-if="blocksForDay(day.id).length === 0" class="day-col__empty">
-            <i class="pi pi-minus" aria-hidden="true" />
-            <span>Sin horario</span>
-          </div>
+      <!-- ===== TAB: Franjas Recurrentes ===== -->
+      <div v-if="activeTab === 'schedules'">
+        <div class="week-grid">
+          <div v-for="day in DAYS" :key="day.id" class="day-col">
+            <h3 class="day-col__title">{{ day.label }}</h3>
 
-          <div v-for="block in blocksForDay(day.id)" :key="block.id" class="block-card">
-            <div class="block-card__times">
-              <span class="block-card__time">{{ block.start_time }}</span>
-              <span class="block-card__separator">–</span>
-              <span class="block-card__time">{{ block.end_time }}</span>
+            <div v-if="schedulesForDay(day.id).length === 0" class="day-col__empty">
+              <i class="pi pi-minus" aria-hidden="true" />
+              <span>Sin horario</span>
             </div>
-            <span class="block-card__slots">
-              {{ block.slot_duration }}min / slot
-            </span>
+
+            <div v-for="s in schedulesForDay(day.id)" :key="s.id" class="block-card">
+              <div class="block-card__times">
+                <span class="block-card__time">{{ displayFranja(s.franja) }}</span>
+              </div>
+              <span class="block-card__slots">
+                {{ s.slot_duration }}min / slot
+              </span>
+              <button
+                type="button"
+                class="block-card__remove"
+                :disabled="isDeleting === s.id"
+                title="Eliminar franja"
+                @click="deleteSchedule(s.id)"
+              >
+                <i
+                  :class="isDeleting === s.id ? 'pi pi-spin pi-spinner' : 'pi pi-trash'"
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add schedule form -->
+        <div class="add-section">
+          <button
+            v-if="!showScheduleForm"
+            type="button"
+            class="add-btn"
+            @click="showScheduleForm = true"
+          >
+            <i class="pi pi-plus" aria-hidden="true" />
+            Agregar Franja
+          </button>
+
+          <form v-else class="add-form" @submit.prevent="createSchedule" novalidate>
+            <h3 class="add-form__title">Nueva Franja Recurrente</h3>
+            <div class="add-form__fields">
+              <div class="add-form__field">
+                <label class="add-form__label" for="sched-day">Día</label>
+                <select id="sched-day" v-model.number="scheduleForm.day_of_week" class="add-form__select">
+                  <option v-for="d in DAYS" :key="d.id" :value="d.id">{{ d.label }}</option>
+                </select>
+                <span v-if="scheduleFormErrors.day_of_week" class="add-form__error">
+                  {{ scheduleFormErrors.day_of_week }}
+                </span>
+              </div>
+              <div class="add-form__field">
+                <label class="add-form__label" for="sched-inicio">Inicio</label>
+                <input id="sched-inicio" v-model="scheduleForm.inicio" type="time" class="add-form__input" />
+                <span v-if="scheduleFormErrors.inicio" class="add-form__error">
+                  {{ scheduleFormErrors.inicio }}
+                </span>
+              </div>
+              <div class="add-form__field">
+                <label class="add-form__label" for="sched-fin">Fin</label>
+                <input id="sched-fin" v-model="scheduleForm.fin" type="time" class="add-form__input" />
+                <span v-if="scheduleFormErrors.fin" class="add-form__error">
+                  {{ scheduleFormErrors.fin }}
+                </span>
+              </div>
+              <div class="add-form__field">
+                <label class="add-form__label" for="sched-duration">Duración slot</label>
+                <select id="sched-duration" v-model.number="scheduleForm.slot_duration" class="add-form__select">
+                  <option :value="10">10 min</option>
+                  <option :value="15">15 min</option>
+                  <option :value="20">20 min</option>
+                  <option :value="30">30 min</option>
+                  <option :value="45">45 min</option>
+                  <option :value="60">60 min</option>
+                  <option :value="90">90 min</option>
+                  <option :value="120">120 min</option>
+                </select>
+                <span v-if="scheduleFormErrors.slot_duration" class="add-form__error">
+                  {{ scheduleFormErrors.slot_duration }}
+                </span>
+              </div>
+            </div>
+            <div class="add-form__actions">
+              <button type="button" class="add-form__cancel" @click="showScheduleForm = false">
+                Cancelar
+              </button>
+              <button type="submit" class="add-form__confirm" :disabled="scheduleSubmitting">
+                <i v-if="scheduleSubmitting" class="pi pi-spin pi-spinner" aria-hidden="true" />
+                <template v-else>
+                  <i class="pi pi-plus" aria-hidden="true" />
+                  Crear Franja
+                </template>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ===== TAB: Bloqueos Puntuales ===== -->
+      <div v-if="activeTab === 'blocks'">
+        <div v-if="blocks.length === 0" class="blocks-empty">
+          <i class="pi pi-inbox" aria-hidden="true" />
+          <p>No hay bloqueos puntuales configurados.</p>
+        </div>
+
+        <div v-else class="blocks-list">
+          <div v-for="b in blocks" :key="b.id" class="block-item">
+            <div class="block-item__info">
+              <span class="block-item__date">{{ b.blocked_date }}</span>
+              <span class="block-item__franja">{{ displayFranja(b.franja) }}</span>
+              <span class="block-item__reason">{{ b.reason }}</span>
+            </div>
             <button
               type="button"
               class="block-card__remove"
-              @click="removeBlock(block.id)"
-              title="Eliminar bloque"
+              :disabled="isDeleting === b.id"
+              title="Eliminar bloqueo"
+              @click="deleteBlock(b.id)"
             >
-              <i class="pi pi-trash" aria-hidden="true" />
+              <i
+                :class="isDeleting === b.id ? 'pi pi-spin pi-spinner' : 'pi pi-trash'"
+                aria-hidden="true"
+              />
             </button>
           </div>
         </div>
-      </div>
 
-      <!-- Add block -->
-      <div class="add-section">
-        <button
-          v-if="!showAddForm"
-          type="button"
-          class="add-btn"
-          @click="showAddForm = true"
-        >
-          <i class="pi pi-plus" aria-hidden="true" />
-          Agregar Bloque
-        </button>
+        <!-- Add block form -->
+        <div class="add-section">
+          <button
+            v-if="!showBlockForm"
+            type="button"
+            class="add-btn"
+            @click="showBlockForm = true"
+          >
+            <i class="pi pi-plus" aria-hidden="true" />
+            Agregar Bloqueo
+          </button>
 
-        <div v-else class="add-form">
-          <h3 class="add-form__title">Nuevo Bloque de Atención</h3>
-          <div class="add-form__fields">
-            <div class="add-form__field">
-              <label class="add-form__label">Día</label>
-              <select v-model.number="newBlock.day" class="add-form__select">
-                <option v-for="d in DAYS" :key="d.id" :value="d.id">{{ d.label }}</option>
-              </select>
+          <form v-else class="add-form" @submit.prevent="createBlock" novalidate>
+            <h3 class="add-form__title">Nuevo Bloqueo Puntual</h3>
+            <div class="add-form__fields">
+              <div class="add-form__field">
+                <label class="add-form__label" for="block-date">Fecha</label>
+                <input id="block-date" v-model="blockForm.blocked_date" type="date" class="add-form__input" />
+                <span v-if="blockFormErrors.blocked_date" class="add-form__error">
+                  {{ blockFormErrors.blocked_date }}
+                </span>
+              </div>
+              <div class="add-form__field">
+                <label class="add-form__label" for="block-inicio">Inicio</label>
+                <input id="block-inicio" v-model="blockForm.inicio" type="time" class="add-form__input" />
+                <span v-if="blockFormErrors.inicio" class="add-form__error">
+                  {{ blockFormErrors.inicio }}
+                </span>
+              </div>
+              <div class="add-form__field">
+                <label class="add-form__label" for="block-fin">Fin</label>
+                <input id="block-fin" v-model="blockForm.fin" type="time" class="add-form__input" />
+                <span v-if="blockFormErrors.fin" class="add-form__error">
+                  {{ blockFormErrors.fin }}
+                </span>
+              </div>
+              <div class="add-form__field add-form__field--full">
+                <label class="add-form__label" for="block-reason">Motivo</label>
+                <input
+                  id="block-reason"
+                  v-model="blockForm.reason"
+                  type="text"
+                  class="add-form__input"
+                  placeholder="Ej: Vacaciones, Conferencia médica"
+                  maxlength="255"
+                />
+                <span v-if="blockFormErrors.reason" class="add-form__error">
+                  {{ blockFormErrors.reason }}
+                </span>
+              </div>
             </div>
-            <div class="add-form__field">
-              <label class="add-form__label">Inicio</label>
-              <input v-model="newBlock.start_time" type="time" class="add-form__input" />
+            <div class="add-form__actions">
+              <button type="button" class="add-form__cancel" @click="showBlockForm = false">
+                Cancelar
+              </button>
+              <button type="submit" class="add-form__confirm" :disabled="blockSubmitting">
+                <i v-if="blockSubmitting" class="pi pi-spin pi-spinner" aria-hidden="true" />
+                <template v-else>
+                  <i class="pi pi-plus" aria-hidden="true" />
+                  Crear Bloqueo
+                </template>
+              </button>
             </div>
-            <div class="add-form__field">
-              <label class="add-form__label">Fin</label>
-              <input v-model="newBlock.end_time" type="time" class="add-form__input" />
-            </div>
-            <div class="add-form__field">
-              <label class="add-form__label">Duración slot</label>
-              <select v-model.number="newBlock.slot_duration" class="add-form__select">
-                <option :value="15">15 min</option>
-                <option :value="30">30 min</option>
-                <option :value="45">45 min</option>
-                <option :value="60">60 min</option>
-              </select>
-            </div>
-          </div>
-          <div class="add-form__actions">
-            <button type="button" class="add-form__cancel" @click="showAddForm = false">
-              Cancelar
-            </button>
-            <button type="button" class="add-form__confirm" @click="addBlock">
-              <i class="pi pi-plus" aria-hidden="true" />
-              Agregar
-            </button>
-          </div>
+          </form>
         </div>
       </div>
     </div>
@@ -231,12 +606,6 @@ function saveAgenda() {
 
 .agenda__header { display: flex; flex-direction: column; gap: var(--spacing-2); }
 
-.agenda__title-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
 .agenda__title {
   font-family: var(--font-heading);
   font-size: var(--text-2xl);
@@ -251,46 +620,69 @@ function saveAgenda() {
   margin: 0;
 }
 
-.agenda__save {
-  display: inline-flex;
-  align-items: center;
+/* Alert banner */
+.agenda__alert {
+  display: flex;
+  align-items: flex-start;
   gap: var(--spacing-2);
-  padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--color-primary-700);
-  color: var(--color-surface-0);
-  border: none;
+  padding: var(--spacing-3) var(--spacing-4);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  font-family: var(--font-body);
-  cursor: pointer;
-  transition: background-color var(--transition-fast);
+  line-height: var(--leading-normal);
 }
 
-.agenda__save:hover:not(:disabled) { background-color: var(--color-primary-600); }
-.agenda__save:disabled { opacity: 0.7; cursor: not-allowed; }
-.agenda__save:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }
+.agenda__alert--error {
+  background-color: var(--color-error-100);
+  color: var(--color-error-700);
+  border-left: 4px solid var(--color-error-600);
+}
+
+.agenda__alert--success {
+  background-color: var(--color-success-50);
+  color: var(--color-success-800);
+  border-left: 4px solid var(--color-success-700);
+}
+
+.agenda__alert--warning {
+  background-color: var(--color-warning-50);
+  color: var(--color-warning-800);
+  border-left: 4px solid var(--color-warning-800);
+}
+
+.agenda__alert i { flex-shrink: 0; margin-top: 2px; }
+
+.agenda__dismiss {
+  display: inline;
+  background: none;
+  border: none;
+  color: inherit;
+  font-weight: var(--font-semibold);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  padding: 0;
+  margin-left: var(--spacing-2);
+}
 
 /* Stats */
 .agenda__stats {
   display: flex;
   gap: var(--spacing-3);
+  flex-wrap: wrap;
 }
 
 .stat {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: var(--spacing-3);
+  padding: var(--spacing-3) var(--spacing-4);
   background-color: var(--color-surface-0);
   border: 1px solid var(--color-surface-200);
   border-radius: var(--radius-md);
+  min-width: 6rem;
 }
 
 .stat__value {
-  font-family: var(--font-heading);
   font-size: var(--text-xl);
   font-weight: var(--font-bold);
   color: var(--color-primary-700);
@@ -301,19 +693,48 @@ function saveAgenda() {
   color: var(--color-text-muted);
 }
 
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: var(--spacing-1);
+  border-bottom: 2px solid var(--color-surface-200);
+  padding-bottom: 0;
+}
+
+.tabs__btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-2) var(--spacing-4);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  font-family: var(--font-body);
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tabs__btn:hover { color: var(--color-text-strong); }
+
+.tabs__btn--active {
+  color: var(--color-primary-700);
+  border-bottom-color: var(--color-primary-700);
+}
+
+.tabs__btn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 /* Week grid */
 .week-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: var(--spacing-2);
-}
-
-@media (max-width: 768px) {
-  .week-grid { grid-template-columns: repeat(3, 1fr); }
-}
-
-@media (max-width: 480px) {
-  .week-grid { grid-template-columns: repeat(2, 1fr); }
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: var(--spacing-3);
 }
 
 .day-col {
@@ -326,82 +747,143 @@ function saveAgenda() {
   font-size: var(--text-sm);
   font-weight: var(--font-semibold);
   color: var(--color-text-strong);
-  text-align: center;
-  padding-bottom: var(--spacing-1);
-  border-bottom: 2px solid var(--color-primary-500);
   margin: 0;
+  padding-bottom: var(--spacing-1);
+  border-bottom: 1px solid var(--color-surface-200);
 }
 
 .day-col__empty {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: var(--spacing-3);
-  color: var(--color-text-subtle);
+  gap: var(--spacing-1);
   font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  padding: var(--spacing-2);
 }
 
 .block-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: var(--spacing-1);
   padding: var(--spacing-2);
-  background-color: var(--color-primary-50);
-  border: 1px solid var(--color-primary-100);
+  background-color: var(--color-surface-0);
+  border: 1px solid var(--color-surface-200);
+  border-left: 3px solid var(--color-primary-500);
   border-radius: var(--radius-md);
   position: relative;
 }
 
-.block-card__times { display: flex; align-items: center; gap: 4px; }
-.block-card__time { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--color-primary-700); }
-.block-card__separator { font-size: var(--text-xs); color: var(--color-text-muted); }
-.block-card__slots { font-size: 10px; color: var(--color-text-subtle); }
+.block-card__times { font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--color-text-strong); }
+
+.block-card__slots { font-size: var(--text-xs); color: var(--color-text-muted); }
 
 .block-card__remove {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  padding: 2px;
+  top: var(--spacing-1);
+  right: var(--spacing-1);
   background: none;
   border: none;
-  color: var(--color-error-600);
+  color: var(--color-text-subtle);
   cursor: pointer;
-  font-size: 10px;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
+  padding: var(--spacing-1);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
 }
 
-.block-card:hover .block-card__remove { opacity: 1; }
+.block-card__remove:hover { color: var(--color-error-600); background-color: var(--color-error-100); }
+.block-card__remove:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.block-card__remove:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Blocks list (puntuales) */
+.blocks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-8) var(--spacing-4);
+  color: var(--color-text-subtle);
+  text-align: center;
+}
+
+.blocks-empty i { font-size: var(--text-2xl); }
+.blocks-empty p { font-size: var(--text-sm); margin: 0; }
+
+.blocks-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.block-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-3) var(--spacing-4);
+  background-color: var(--color-surface-0);
+  border: 1px solid var(--color-surface-200);
+  border-left: 3px solid var(--color-warning-800);
+  border-radius: var(--radius-md);
+}
+
+.block-item__info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+  align-items: center;
+}
+
+.block-item__date {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--color-text-strong);
+}
+
+.block-item__franja {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.block-item__reason {
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  font-style: italic;
+}
 
 /* Add section */
-.add-section { margin-top: var(--spacing-2); }
+.add-section { margin-top: var(--spacing-3); }
 
 .add-btn {
   display: inline-flex;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: var(--spacing-1);
   padding: var(--spacing-2) var(--spacing-4);
-  background-color: var(--color-surface-0);
-  border: 2px dashed var(--color-surface-200);
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
   font-size: var(--text-sm);
+  font-weight: var(--font-medium);
   font-family: var(--font-body);
+  color: var(--color-primary-700);
+  background: none;
+  border: 1px dashed var(--color-primary-500);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
-.add-btn:hover {
-  border-color: var(--color-primary-500);
-  color: var(--color-primary-700);
+.add-btn:hover { background-color: var(--color-primary-50); }
+
+.add-btn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 .add-form {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3);
+  gap: var(--spacing-4);
   padding: var(--spacing-4);
   background-color: var(--color-surface-0);
   border: 1px solid var(--color-surface-200);
@@ -409,7 +891,7 @@ function saveAgenda() {
 }
 
 .add-form__title {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: var(--font-semibold);
   color: var(--color-text-strong);
   margin: 0;
@@ -417,20 +899,22 @@ function saveAgenda() {
 
 .add-form__fields {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
   gap: var(--spacing-3);
 }
 
-@media (max-width: 640px) {
-  .add-form__fields { grid-template-columns: repeat(2, 1fr); }
+.add-form__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
 }
 
-.add-form__field { display: flex; flex-direction: column; gap: var(--spacing-1); }
+.add-form__field--full { grid-column: 1 / -1; }
 
 .add-form__label {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: var(--font-medium);
-  color: var(--color-text-muted);
+  color: var(--color-text-strong);
 }
 
 .add-form__input,
@@ -441,6 +925,7 @@ function saveAgenda() {
   font-size: var(--text-sm);
   font-family: var(--font-body);
   color: var(--color-text-strong);
+  background-color: var(--color-surface-0);
 }
 
 .add-form__input:focus,
@@ -450,6 +935,11 @@ function saveAgenda() {
   box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
+.add-form__error {
+  font-size: var(--text-xs);
+  color: var(--color-error-700);
+}
+
 .add-form__actions {
   display: flex;
   gap: var(--spacing-2);
@@ -457,30 +947,39 @@ function saveAgenda() {
 }
 
 .add-form__cancel {
-  padding: var(--spacing-2) var(--spacing-3);
+  padding: var(--spacing-2) var(--spacing-4);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-text-muted);
   background: none;
   border: 1px solid var(--color-surface-200);
   border-radius: var(--radius-md);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-family: var(--font-body);
   cursor: pointer;
 }
+
+.add-form__cancel:hover { background-color: var(--color-surface-100); }
 
 .add-form__confirm {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-1);
-  padding: var(--spacing-2) var(--spacing-3);
-  background-color: var(--color-primary-700);
-  color: var(--color-surface-0);
-  border: none;
-  border-radius: var(--radius-md);
+  padding: var(--spacing-2) var(--spacing-4);
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
   font-family: var(--font-body);
+  color: var(--color-surface-0);
+  background-color: var(--color-primary-700);
+  border: none;
+  border-radius: var(--radius-md);
   cursor: pointer;
+  transition: background-color var(--transition-fast);
 }
 
-.add-form__confirm:hover { background-color: var(--color-primary-600); }
+.add-form__confirm:hover:not(:disabled) { background-color: var(--color-primary-600); }
+.add-form__confirm:disabled { opacity: 0.7; cursor: not-allowed; }
+
+.add-form__confirm:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
 </style>

@@ -11,7 +11,6 @@
 | Página | RF del que depende | Estado del contrato | Riesgo |
 |---|---|---|---|
 | `ConsultationRoom.vue` | RF-14 Consulta por Chat en Tiempo Real, RF-15 Nota SOAP (Borrador a Firmada) | **NO EXISTE**. Ni especificación hay. | Reescritura total probable |
-| `AgendaManager.vue` | RF-08 Configuración de Agenda y Bloqueos (escritura) | **En definición** del otro lado. | Modelo de datos adivinado |
 | `BookingWizard.vue` | RF-09 Reserva de Citas sin Solapamiento | API_CONTRACTS.md §3 tiene lectura, **escritura adivinada** | Flujo de pasos y props adivinados |
 
 **Regla:** No se agrega ninguna página más hasta que su contrato exista.
@@ -24,7 +23,14 @@
 |---|---|---|
 | `Register.vue` | Migrar a `useForm` de Inertia | Cuando exista `POST /register` y su contrato |
 | `BookingWizard.vue` | Migrar mutación a `useForm` | Cuando RF-09 Reserva de Citas sin Solapamiento escritura cierre |
-| `AgendaManager.vue` | Migrar a `useForm` | Cuando RF-08 Configuración de Agenda y Bloqueos escritura cierre |
+
+---
+
+## Páginas ajustadas al contrato real
+
+| Página | RF | Fecha | Cambio |
+|---|---|---|---|
+| `AgendaManager.vue` | RF-08 Configuración de Agenda y Bloqueos | 2026-08-04 | Reescritura completa: 2 recursos (schedules + schedule-blocks), POST/DELETE individual con fetch, validación client-side, manejo 409/403/422 |
 
 ---
 
@@ -48,4 +54,5 @@
 | `loginValidation.test.ts` | 11 | Validación client-side, seguridad del mensaje de credenciales |
 | `stateComponents.test.ts` | 18 | SpinnerLoader (aria-busy, role=status), ErrorFallback (role=alert, retry), EmptyState (mensaje, acción) |
 | `timezone.test.ts` | 9 | Dos zonas, fecha fija, DST spring forward NY, zona sin DST BsAs, label con offset |
-| **Total** | **42** | |
+| `scheduleHelpers.test.ts` | 33 | parseFranja (6), timeToApi (3), validateSchedule (13), validateBlock (9), DAYS (2) |
+| **Total** | **75** | |
