@@ -53,19 +53,15 @@ function formatFee(fee: number): string {
     <!-- ===== HERO ===== -->
     <section class="hero">
       <div class="hero__inner">
-        <!-- Asistente AI (izquierda) -->
-        <div class="hero__assistant">
+        <!-- Ilustración médica (izquierda) -->
+        <div class="hero__visual-left">
           <img
-            src="/images/ai-assistant.jpg"
-            alt="Asistente médico inteligente"
-            class="hero__assistant-img"
+            src="/images/hero-doctor.jpg"
+            alt="Doctora profesional con tablet de gestión médica"
+            class="hero__visual-left-img"
             width="280"
-            height="280"
+            height="370"
           />
-          <div class="hero__speech-bubble">
-            <p>¡Hola! Soy tu asistente médico inteligente. ¿Cómo puedo ayudarte hoy?</p>
-          </div>
-        </div>
 
         <!-- Contenido central -->
         <div class="hero__content">
@@ -268,51 +264,20 @@ function formatFee(fee: number): string {
   margin: 0 auto;
 }
 
-/* Assistant column */
-.hero__assistant {
+/* Left visual column */
+.hero__visual-left {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  position: relative;
+  justify-content: center;
 }
 
-.hero__assistant-img {
+.hero__visual-left-img {
   width: 100%;
   max-width: 16rem;
   height: auto;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-xl);
   object-fit: cover;
   filter: drop-shadow(0 8px 24px rgba(0, 128, 128, 0.15));
-}
-
-.hero__speech-bubble {
-  background-color: var(--color-surface-0);
-  border: 1px solid var(--color-surface-200);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-3) var(--spacing-4);
-  margin-top: calc(-1 * var(--spacing-3));
-  box-shadow: var(--shadow-md);
-  position: relative;
-  max-width: 18rem;
-}
-
-.hero__speech-bubble::before {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: 2rem;
-  width: 0;
-  height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 8px solid var(--color-surface-0);
-}
-
-.hero__speech-bubble p {
-  font-size: var(--text-sm);
-  color: var(--color-text-strong);
-  margin: 0;
-  line-height: var(--leading-relaxed);
 }
 
 /* Content column */
@@ -433,15 +398,10 @@ function formatFee(fee: number): string {
     text-align: center;
   }
 
-  .hero__assistant { order: 1; }
+  .hero__visual-left { order: 1; }
   .hero__content { order: 2; align-items: center; }
   .hero__illustration { order: 3; }
   .hero__actions { align-items: center; }
-
-  .hero__speech-bubble {
-    margin-left: auto;
-    margin-right: auto;
-  }
 }
 
 /* ===== BENEFITS ===== */
