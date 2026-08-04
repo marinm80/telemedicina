@@ -104,6 +104,25 @@ function formatFee(fee: number): string {
       </div>
     </section>
 
+    <!-- ===== CTA — Registro / Login ===== -->
+    <section class="cta-banner">
+      <div class="cta-banner__inner">
+        <p class="cta-banner__text">
+          Para agendar una cita, crea tu cuenta o inicia sesión.
+        </p>
+        <div class="cta-banner__actions">
+          <a href="/register" class="cta-banner__btn cta-banner__btn--primary">
+            <i class="pi pi-user-plus" aria-hidden="true" />
+            Crear cuenta
+          </a>
+          <a href="/login" class="cta-banner__btn cta-banner__btn--outline">
+            <i class="pi pi-sign-in" aria-hidden="true" />
+            Iniciar sesión
+          </a>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== BENEFICIOS ===== -->
     <section class="benefits">
       <div class="benefits__inner">
@@ -194,25 +213,6 @@ function formatFee(fee: number): string {
               </button>
             </div>
           </article>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== CTA — Registro / Login ===== -->
-    <section class="cta-banner">
-      <div class="cta-banner__inner">
-        <p class="cta-banner__text">
-          Para agendar una cita, crea tu cuenta o inicia sesión.
-        </p>
-        <div class="cta-banner__actions">
-          <a href="/register" class="cta-banner__btn cta-banner__btn--primary">
-            <i class="pi pi-user-plus" aria-hidden="true" />
-            Crear cuenta
-          </a>
-          <a href="/login" class="cta-banner__btn cta-banner__btn--outline">
-            <i class="pi pi-sign-in" aria-hidden="true" />
-            Iniciar sesión
-          </a>
         </div>
       </div>
     </section>
