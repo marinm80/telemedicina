@@ -62,12 +62,14 @@ export interface CreateAppointmentPayload {
 
 /**
  * Respuesta de cancelación de cita.
- * Fuente: API_CONTRACTS.md §3 → Endpoint 5 → Respuesta 200 OK
+ * Fuente: AppointmentController@cancel → CancelAppointmentAction
+ *   RF-25 Cancelación de Citas y Reembolsos
  */
 export interface CancelledAppointment {
   id: string;
   status: 'cancelled';
   cancelled_by: string;
-  cancellation_reason: string;
-  refund_processed: boolean;
+  cancellation_reason: string | null;
+  refund_percentage: number;    // 100 o 0
+  refund_status: string;        // 'full_refund' o 'no_refund'
 }

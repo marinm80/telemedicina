@@ -21,6 +21,7 @@ import type { LoginValidationErrors } from '@/lib/loginValidation';
 const form = useForm({
   email: '',
   password: '',
+  remember: false,
 });
 
 // ---------------------------------------------------------------------------
@@ -156,6 +157,19 @@ function handleSubmit() {
             <span v-if="form.errors.password && !serverError" class="auth-form__error">
               {{ form.errors.password }}
             </span>
+          </div>
+
+          <div class="auth-form__remember">
+            <label class="auth-form__checkbox-label" for="login-remember">
+              <input
+                id="login-remember"
+                v-model="form.remember"
+                type="checkbox"
+                class="auth-form__checkbox"
+                :disabled="form.processing"
+              />
+              Recordar sesión
+            </label>
           </div>
 
           <button
@@ -326,6 +340,28 @@ function handleSubmit() {
 .auth-form__error {
   font-size: var(--text-xs);
   color: var(--color-error-700);
+}
+
+.auth-form__remember {
+  display: flex;
+  align-items: center;
+}
+
+.auth-form__checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.auth-form__checkbox {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-primary-700);
+  cursor: pointer;
 }
 
 .auth-form__submit {

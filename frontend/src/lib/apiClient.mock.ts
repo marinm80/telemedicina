@@ -68,7 +68,8 @@ export const mockCancelledAppointment: CancelledAppointment = {
   status: 'cancelled',
   cancelled_by: '660e8400-e29b-41d4-a716-446655441111',
   cancellation_reason: 'Paciente reporta imposibilidad de conexión por viaje.',
-  refund_processed: false,
+  refund_percentage: 100,
+  refund_status: 'full_refund',
 };
 
 export { simulateLatency };

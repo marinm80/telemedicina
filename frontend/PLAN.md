@@ -11,7 +11,6 @@
 | Página | RF del que depende | Estado del contrato | Riesgo |
 |---|---|---|---|
 | `ConsultationRoom.vue` | RF-14 Consulta por Chat en Tiempo Real, RF-15 Nota SOAP (Borrador a Firmada) | **NO EXISTE**. Ni especificación hay. | Reescritura total probable |
-| `BookingWizard.vue` | RF-09 Reserva de Citas sin Solapamiento | API_CONTRACTS.md §3 tiene lectura, **escritura adivinada** | Flujo de pasos y props adivinados |
 
 **Regla:** No se agrega ninguna página más hasta que su contrato exista.
 
@@ -22,7 +21,6 @@
 | Página | Qué falta | Cuándo |
 |---|---|---|
 | `Register.vue` | Migrar a `useForm` de Inertia | Cuando exista `POST /register` y su contrato |
-| `BookingWizard.vue` | Migrar mutación a `useForm` | Cuando RF-09 Reserva de Citas sin Solapamiento escritura cierre |
 
 ---
 
@@ -31,6 +29,9 @@
 | Página | RF | Fecha | Cambio |
 |---|---|---|---|
 | `AgendaManager.vue` | RF-08 Configuración de Agenda y Bloqueos | 2026-08-04 | Reescritura completa: 2 recursos (schedules + schedule-blocks), POST/DELETE individual con fetch, validación client-side, manejo 409/403/422 |
+| `BookingWizard.vue` | RF-09 Reserva de Citas sin Solapamiento | 2026-08-04 | Reescritura: GET availability real, POST /api/appointments con X-Idempotency-Key, validación franja_inicio/franja_fin (30 min exactos), manejo 409 solapamiento |
+| `Login.vue` | RF-01 Registro y Verificación de Paciente | 2026-08-04 | Agregado campo `remember` al useForm |
+| `MyAppointments.vue` | RF-25 Cancelación de Citas y Reembolsos | 2026-08-04 | Botón cancelar funcional: modal con reason (max 500), POST /api/appointments/{id}/cancel, display refund_percentage/refund_status, manejo 409/403 |
 
 ---
 
@@ -55,4 +56,5 @@
 | `stateComponents.test.ts` | 18 | SpinnerLoader (aria-busy, role=status), ErrorFallback (role=alert, retry), EmptyState (mensaje, acción) |
 | `timezone.test.ts` | 9 | Dos zonas, fecha fija, DST spring forward NY, zona sin DST BsAs, label con offset |
 | `scheduleHelpers.test.ts` | 33 | parseFranja (6), timeToApi (3), validateSchedule (13), validateBlock (9), DAYS (2) |
-| **Total** | **75** | |
+| `appointmentHelpers.test.ts` | 20 | validateBooking (12): UUIDs, fechas, 30 min exactos. validateCancel (4): nullable, max 500. refundLabel (3) |
+| **Total** | **95** | |

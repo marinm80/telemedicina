@@ -1,26 +1,58 @@
 <!--
   ====================================================================
-  BookingWizard — Reserva de Cita (Paciente)
+  BookingWizard — RF-09 Reserva de Citas sin Solapamiento
   AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
   ====================================================================
   Wizard de 3 pasos: Seleccionar médico → Elegir horario → Confirmar.
-  Props tipadas por Inertia; modo simulado con mocks.
+
+  Contrato real:
+    GET  /api/doctors/{id}/availability?date=YYYY-MM-DD → slots
+    POST /api/appointments  (X-Idempotency-Key, franja_inicio, franja_fin)
+
+  Step 1 recibe doctores como props de Inertia.
+  Steps 2-3 usan fetch contra la API REST.
+
+  Validación client-side espeja BookAppointmentRequest:
+    patient_id, doctor_id: required, uuid
+    franja_inicio: required, date, after:now, max 1 año
+    franja_fin: required, date, after:franja_inicio, exactamente 30 min
 -->
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SpinnerLoader from '@/components/ui/SpinnerLoader.vue';
 import ErrorFallback from '@/components/ui/ErrorFallback.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
-import { useAppState } from '@/composables/useAppState';
-import { mockPublicDoctors, getInitials, getAvatarColor } from '@/lib/mockData';
-import { formatInUserTimezone } from '@/lib/timezone';
+import { getInitials, getAvatarColor } from '@/lib/mockData';
+import {
+  validateBooking,
+  generateIdempotencyKey,
+  getCsrfToken,
+} from '@/lib/appointmentHelpers';
 import type { PublicDoctor } from '@/types/public.types';
-import type { Slot } from '@/types/api.types';
+import type { Slot, AvailabilityResponse } from '@/types/api.types';
+import { usePage } from '@inertiajs/vue3';
 
-const USER_TZ = 'America/Argentina/Buenos_Aires';
+// ── Props de Inertia ───────────────────────────────────────────────────
+const props = withDefaults(
+  defineProps<{
+    doctors?: PublicDoctor[];
+  }>(),
+  {
+    doctors: () => [],
+  },
+);
 
-// --- Wizard state ---
+// ── Auth — patient_id del usuario autenticado ──────────────────────────
+const page = usePage();
+const authUserId = computed<string>(() => {
+  const auth = (page.props as Record<string, unknown>).auth as
+    | { user?: { id?: string } }
+    | undefined;
+  return auth?.user?.id ?? '';
+});
+
+// ── Wizard state ───────────────────────────────────────────────────────
 type Step = 1 | 2 | 3;
 const currentStep = ref<Step>(1);
 const selectedDoctor = ref<PublicDoctor | null>(null);
@@ -28,66 +60,76 @@ const selectedDate = ref('');
 const selectedSlot = ref<Slot | null>(null);
 const isBooking = ref(false);
 const bookingSuccess = ref(false);
+const bookingError = ref('');
 
-// --- Step 1: Load doctors ---
-const doctorFetcher = async (signal: AbortSignal): Promise<PublicDoctor[]> => {
-  await new Promise((r) => setTimeout(r, 800));
-  signal.throwIfAborted();
-  return [...mockPublicDoctors];
-};
-
-const {
-  items: doctors,
-  estado: doctorEstado,
-  error: doctorError,
-  cargar: cargarDoctors,
-} = useAppState<PublicDoctor>(doctorFetcher);
-
-const controller = new AbortController();
-onMounted(() => cargarDoctors(controller.signal));
-onUnmounted(() => controller.abort());
-
-// --- Step 2: Load slots ---
-const mockSlots: Slot[] = [
-  { start: '2026-08-04T13:00:00Z', end: '2026-08-04T13:30:00Z', local_start: '08:00 AM', local_end: '08:30 AM', available: true },
-  { start: '2026-08-04T13:30:00Z', end: '2026-08-04T14:00:00Z', local_start: '08:30 AM', local_end: '09:00 AM', available: true },
-  { start: '2026-08-04T14:00:00Z', end: '2026-08-04T14:30:00Z', local_start: '09:00 AM', local_end: '09:30 AM', available: false },
-  { start: '2026-08-04T14:30:00Z', end: '2026-08-04T15:00:00Z', local_start: '09:30 AM', local_end: '10:00 AM', available: true },
-  { start: '2026-08-04T15:00:00Z', end: '2026-08-04T15:30:00Z', local_start: '10:00 AM', local_end: '10:30 AM', available: true },
-  { start: '2026-08-04T15:30:00Z', end: '2026-08-04T16:00:00Z', local_start: '10:30 AM', local_end: '11:00 AM', available: true },
-];
-
-const slotFetcher = async (signal: AbortSignal): Promise<Slot[]> => {
-  await new Promise((r) => setTimeout(r, 600));
-  signal.throwIfAborted();
-  return [...mockSlots];
-};
-
-const {
-  items: slots,
-  estado: slotEstado,
-  error: slotError,
-  cargar: cargarSlots,
-} = useAppState<Slot>(slotFetcher);
+// ── Step 2: Availability ───────────────────────────────────────────────
+const slots = ref<Slot[]>([]);
+const slotEstado = ref<'idle' | 'cargando' | 'listo' | 'error'>('idle');
+const slotError = ref<string | null>(null);
+const doctorTimezone = ref('');
 
 const availableSlots = computed(() => slots.value.filter((s) => s.available));
 
-// --- Navigation ---
+async function fetchAvailability(doctorId: string, date: string) {
+  slotEstado.value = 'cargando';
+  slotError.value = null;
+  slots.value = [];
+
+  try {
+    const res = await fetch(
+      `/api/doctors/${doctorId}/availability?date=${date}`,
+      {
+        headers: { 'Accept': 'application/json' },
+        credentials: 'same-origin',
+      },
+    );
+
+    if (res.ok) {
+      const json: AvailabilityResponse = await res.json();
+      slots.value = json.slots;
+      doctorTimezone.value = json.timezone;
+      slotEstado.value = 'listo';
+    } else if (res.status === 422) {
+      const json = await res.json();
+      slotError.value = json.message ?? 'Fecha inválida.';
+      slotEstado.value = 'error';
+    } else {
+      slotError.value = 'Error al cargar horarios.';
+      slotEstado.value = 'error';
+    }
+  } catch {
+    slotError.value = 'Error de red. Verifica tu conexión.';
+    slotEstado.value = 'error';
+  }
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────
 function selectDoctor(doctor: PublicDoctor) {
   selectedDoctor.value = doctor;
-  selectedDate.value = '2026-08-04';
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  selectedDate.value = tomorrow.toISOString().split('T')[0];
   currentStep.value = 2;
-  cargarSlots();
+  fetchAvailability(doctor.id, selectedDate.value);
+}
+
+function onDateChange() {
+  if (selectedDoctor.value && selectedDate.value) {
+    selectedSlot.value = null;
+    fetchAvailability(selectedDoctor.value.id, selectedDate.value);
+  }
 }
 
 function selectSlot(slot: Slot) {
   selectedSlot.value = slot;
   currentStep.value = 3;
+  bookingError.value = '';
 }
 
 function goBack() {
   if (currentStep.value === 3) {
     selectedSlot.value = null;
+    bookingError.value = '';
     currentStep.value = 2;
   } else if (currentStep.value === 2) {
     selectedDoctor.value = null;
@@ -96,22 +138,65 @@ function goBack() {
   }
 }
 
-function confirmBooking() {
-  isBooking.value = true;
-  // TODO: Inertia router.post('/api/appointments', payload)
-  setTimeout(() => {
-    isBooking.value = false;
-    bookingSuccess.value = true;
-  }, 1500);
-}
+// ── Step 3: Book Appointment ───────────────────────────────────────────
+async function confirmBooking() {
+  if (!selectedDoctor.value || !selectedSlot.value) return;
 
-function formatSlotTime(iso: string): string {
-  return formatInUserTimezone(iso, USER_TZ, {
-    timeZone: USER_TZ,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  });
+  const payload = {
+    patient_id: authUserId.value,
+    doctor_id: selectedDoctor.value.id,
+    franja_inicio: selectedSlot.value.start,
+    franja_fin: selectedSlot.value.end,
+  };
+
+  const errs = validateBooking(payload);
+  if (Object.keys(errs).length > 0) {
+    bookingError.value = Object.values(errs).join(' ');
+    return;
+  }
+
+  isBooking.value = true;
+  bookingError.value = '';
+
+  try {
+    const res = await fetch('/api/appointments', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-XSRF-TOKEN': getCsrfToken(),
+        'X-Idempotency-Key': generateIdempotencyKey(),
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload),
+    });
+
+    if (res.status === 201) {
+      bookingSuccess.value = true;
+    } else if (res.status === 409) {
+      bookingError.value = 'Este horario ya fue reservado. Por favor, elige otro.';
+      currentStep.value = 2;
+      selectedSlot.value = null;
+      if (selectedDoctor.value && selectedDate.value) {
+        fetchAvailability(selectedDoctor.value.id, selectedDate.value);
+      }
+    } else if (res.status === 422) {
+      const json = await res.json();
+      const messages = json.errors
+        ? Object.values(json.errors as Record<string, string[]>).flat().join(' ')
+        : json.message ?? 'Error de validación.';
+      bookingError.value = messages;
+    } else if (res.status === 403) {
+      const json = await res.json();
+      bookingError.value = json.message ?? 'No tienes permiso para esta acción.';
+    } else {
+      bookingError.value = 'Error inesperado al reservar. Intenta nuevamente.';
+    }
+  } catch {
+    bookingError.value = 'Error de red. Verifica tu conexión.';
+  } finally {
+    isBooking.value = false;
+  }
 }
 
 const STEPS = [
@@ -119,6 +204,10 @@ const STEPS = [
   { num: 2, label: 'Horario' },
   { num: 3, label: 'Confirmación' },
 ];
+
+function todayISO(): string {
+  return new Date().toISOString().split('T')[0];
+}
 </script>
 
 <template>
@@ -138,26 +227,34 @@ const STEPS = [
               { 'stepper__step--done': currentStep > step.num },
             ]"
           >
-            <span class="stepper__number">
-              <i v-if="currentStep > step.num" class="pi pi-check" aria-hidden="true" />
-              <template v-else>{{ step.num }}</template>
-            </span>
+            <span class="stepper__num">{{ step.num }}</span>
             <span class="stepper__label">{{ step.label }}</span>
           </div>
         </div>
       </header>
 
+      <!-- Alert banner -->
+      <div
+        v-if="bookingError"
+        class="booking__alert booking__alert--error"
+        role="alert"
+      >
+        <i class="pi pi-exclamation-triangle" aria-hidden="true" />
+        <span>{{ bookingError }}</span>
+      </div>
+
       <!-- ===== STEP 1: Select Doctor ===== -->
       <section v-if="currentStep === 1" class="booking__step">
-        <h2 class="booking__step-title">Elige un especialista</h2>
+        <h2 class="booking__step-title">Selecciona un especialista</h2>
 
-        <SpinnerLoader v-if="doctorEstado === 'cargando'" variant="card" :lines="4" />
-        <ErrorFallback v-else-if="doctorEstado === 'error'" :message="doctorError ?? 'Error'" :on-retry="() => cargarDoctors()" />
-        <EmptyState v-else-if="doctorEstado === 'listo' && doctors.length === 0" message="No hay especialistas disponibles." />
+        <EmptyState
+          v-if="props.doctors.length === 0"
+          message="No hay especialistas disponibles."
+        />
 
-        <div v-else-if="doctorEstado === 'listo'" class="booking__grid">
+        <div v-else class="doc-grid">
           <button
-            v-for="doc in doctors"
+            v-for="doc in props.doctors"
             :key="doc.id"
             type="button"
             class="doc-pick"
@@ -165,9 +262,9 @@ const STEPS = [
           >
             <div
               class="doc-pick__avatar"
-              :style="{ backgroundColor: getAvatarColor(`${doc.name} ${doc.last_name}`) }"
+              :style="{ backgroundColor: getAvatarColor(doc.id) }"
             >
-              {{ getInitials(`${doc.name} ${doc.last_name}`) }}
+              {{ getInitials(doc.name + ' ' + doc.last_name) }}
             </div>
             <div class="doc-pick__info">
               <span class="doc-pick__name">{{ doc.name }} {{ doc.last_name }}</span>
@@ -189,13 +286,27 @@ const STEPS = [
           Horarios disponibles —
           <span class="booking__doctor-name">{{ selectedDoctor?.name }} {{ selectedDoctor?.last_name }}</span>
         </h2>
-        <p class="booking__date">
-          <i class="pi pi-calendar" aria-hidden="true" />
-          {{ selectedDate }}
-        </p>
+
+        <div class="booking__date-picker">
+          <label class="booking__date-label" for="booking-date">
+            <i class="pi pi-calendar" aria-hidden="true" />
+            Fecha
+          </label>
+          <input
+            id="booking-date"
+            v-model="selectedDate"
+            type="date"
+            class="booking__date-input"
+            :min="todayISO()"
+            @change="onDateChange"
+          />
+          <span v-if="doctorTimezone" class="booking__tz-label">
+            Zona del médico: {{ doctorTimezone }}
+          </span>
+        </div>
 
         <SpinnerLoader v-if="slotEstado === 'cargando'" variant="list" :lines="6" />
-        <ErrorFallback v-else-if="slotEstado === 'error'" :message="slotError ?? 'Error'" :on-retry="() => cargarSlots()" />
+        <ErrorFallback v-else-if="slotEstado === 'error'" :message="slotError ?? 'Error'" :on-retry="() => fetchAvailability(selectedDoctor!.id, selectedDate)" />
         <EmptyState v-else-if="slotEstado === 'listo' && availableSlots.length === 0" message="No hay horarios disponibles para esta fecha." />
 
         <div v-else-if="slotEstado === 'listo'" class="slot-grid">
@@ -330,7 +441,7 @@ const STEPS = [
   background-color: var(--color-success-50);
 }
 
-.stepper__number {
+.stepper__num {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -344,12 +455,12 @@ const STEPS = [
   flex-shrink: 0;
 }
 
-.stepper__step--active .stepper__number {
+.stepper__step--active .stepper__num {
   background-color: var(--color-primary-700);
   color: var(--color-surface-0);
 }
 
-.stepper__step--done .stepper__number {
+.stepper__step--done .stepper__num {
   background-color: var(--color-success-700);
   color: var(--color-surface-0);
 }
@@ -377,13 +488,62 @@ const STEPS = [
 
 .booking__doctor-name { color: var(--color-primary-700); }
 
-.booking__date {
+/* Alert */
+.booking__alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+
+.booking__alert--error {
+  background-color: var(--color-error-100);
+  color: var(--color-error-700);
+  border-left: 4px solid var(--color-error-600);
+}
+
+.booking__alert i { flex-shrink: 0; margin-top: 2px; }
+
+/* Date picker */
+.booking__date-picker {
   display: flex;
   align-items: center;
-  gap: var(--spacing-2);
+  gap: var(--spacing-3);
+  flex-wrap: wrap;
+}
+
+.booking__date-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  margin: 0;
+  font-weight: var(--font-medium);
+  color: var(--color-text-strong);
+}
+
+.booking__date-input {
+  padding: var(--spacing-2);
+  border: 1px solid var(--color-surface-200);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-family: var(--font-body);
+  color: var(--color-text-strong);
+  background-color: var(--color-surface-0);
+}
+
+.booking__date-input:focus {
+  outline: none;
+  border-color: var(--color-primary-500);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
+}
+
+.booking__tz-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-subtle);
+  font-style: italic;
 }
 
 .booking__back {
@@ -403,7 +563,7 @@ const STEPS = [
 .booking__back:hover { color: var(--color-primary-700); }
 
 /* Doctor pick cards */
-.booking__grid {
+.doc-grid {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
