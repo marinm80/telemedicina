@@ -62,6 +62,7 @@ function formatFee(fee: number): string {
             width="280"
             height="370"
           />
+        </div>
 
         <!-- Contenido central -->
         <div class="hero__content">
