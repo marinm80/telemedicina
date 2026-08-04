@@ -10,6 +10,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue';
 import LandingLayout from '@/layouts/LandingLayout.vue';
+import PublicAssistant from '@/components/PublicAssistant.vue';
 import SpinnerLoader from '@/components/ui/SpinnerLoader.vue';
 import ErrorFallback from '@/components/ui/ErrorFallback.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
@@ -245,6 +246,9 @@ function formatFee(fee: number): string {
       </div>
     </section>
   </LandingLayout>
+
+  <!-- RF-23 Asistente Informativo (Landing) -->
+  <PublicAssistant />
 </template>
 
 <style scoped>
