@@ -9,9 +9,12 @@
  * 2. Email con formato inválido produce error de formato.
  * 3. Contraseña vacía produce error de campo obligatorio.
  * 4. Campos válidos no producen errores.
- * 5. CREDENTIAL_ERROR es IDÉNTICO para correo inexistente y contraseña mala.
- *    Esto es la prueba de que la constante es una sola — no dos textos
- *    que hoy coinciden y mañana divergen.
+ * 5. CREDENTIAL_ERROR: DOCUMENTA que existe una sola constante exportada
+ *    y que su texto no filtra pistas obvias de enumeración de usuarios.
+ *    Esta prueba NO GARANTIZA la no-enumeración. La garantía real vive
+ *    en AuthTest del backend (el atacante lee la respuesta HTTP, no la
+ *    interfaz). Lo que sí hace: si alguien edita el texto y mete una
+ *    frase reveladora obvia, el test falla. Nada más que eso.
  */
 import { describe, it, expect } from 'vitest';
 import { validateLoginClient, CREDENTIAL_ERROR } from './loginValidation';

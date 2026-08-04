@@ -10,9 +10,9 @@
 
 | Página | RF del que depende | Estado del contrato | Riesgo |
 |---|---|---|---|
-| `ConsultationRoom.vue` | RF-12 (consulta en vivo), RF-13 (nota SOAP) | **NO EXISTE**. Ni especificación hay. | Reescritura total probable |
-| `AgendaManager.vue` | RF-08 (escritura de agenda) | **En definición** del otro lado. | Modelo de datos adivinado |
-| `BookingWizard.vue` | RF-03 (reserva de cita) | API_CONTRACTS.md §3 tiene lectura, **escritura adivinada** | Flujo de pasos y props adivinados |
+| `ConsultationRoom.vue` | RF-12 Consulta en Vivo (Video + Chat), RF-13 Nota Clínica SOAP | **NO EXISTE**. Ni especificación hay. | Reescritura total probable |
+| `AgendaManager.vue` | RF-08 Gestión de Agenda del Médico (escritura) | **En definición** del otro lado. | Modelo de datos adivinado |
+| `BookingWizard.vue` | RF-09 Reserva de Citas sin Solapamiento | API_CONTRACTS.md §3 tiene lectura, **escritura adivinada** | Flujo de pasos y props adivinados |
 
 **Regla:** No se agrega ninguna página más hasta que su contrato exista.
 
