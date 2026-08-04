@@ -10,8 +10,8 @@
 
 | Página | RF del que depende | Estado del contrato | Riesgo |
 |---|---|---|---|
-| `ConsultationRoom.vue` | RF-12 Consulta en Vivo (Video + Chat), RF-13 Nota Clínica SOAP | **NO EXISTE**. Ni especificación hay. | Reescritura total probable |
-| `AgendaManager.vue` | RF-08 Gestión de Agenda del Médico (escritura) | **En definición** del otro lado. | Modelo de datos adivinado |
+| `ConsultationRoom.vue` | RF-14 Consulta por Chat en Tiempo Real, RF-15 Nota SOAP (Borrador a Firmada) | **NO EXISTE**. Ni especificación hay. | Reescritura total probable |
+| `AgendaManager.vue` | RF-08 Configuración de Agenda y Bloqueos (escritura) | **En definición** del otro lado. | Modelo de datos adivinado |
 | `BookingWizard.vue` | RF-09 Reserva de Citas sin Solapamiento | API_CONTRACTS.md §3 tiene lectura, **escritura adivinada** | Flujo de pasos y props adivinados |
 
 **Regla:** No se agrega ninguna página más hasta que su contrato exista.
@@ -23,8 +23,8 @@
 | Página | Qué falta | Cuándo |
 |---|---|---|
 | `Register.vue` | Migrar a `useForm` de Inertia | Cuando exista `POST /register` y su contrato |
-| `BookingWizard.vue` | Migrar mutación a `useForm` | Cuando RF-03 escritura cierre |
-| `AgendaManager.vue` | Migrar a `useForm` | Cuando RF-08 escritura cierre |
+| `BookingWizard.vue` | Migrar mutación a `useForm` | Cuando RF-09 Reserva de Citas sin Solapamiento escritura cierre |
+| `AgendaManager.vue` | Migrar a `useForm` | Cuando RF-08 Configuración de Agenda y Bloqueos escritura cierre |
 
 ---
 
