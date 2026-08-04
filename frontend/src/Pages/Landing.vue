@@ -91,7 +91,7 @@ function formatFee(fee: number): string {
         <div class="hero__illustration">
           <img
             src="/images/hero-patient.jpg"
-            alt="Paciente usando la aplicación de telemedicina"
+            alt="Paciente reservando una cita médica desde su teléfono"
             class="hero__illustration-img"
             width="320"
             height="320"
