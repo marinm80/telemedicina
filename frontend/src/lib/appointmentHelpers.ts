@@ -15,10 +15,9 @@
 // ── Validación para crear cita (espeja BookAppointmentRequest) ─────────
 
 export interface BookingValidationErrors {
-  patient_id?: string;
   doctor_id?: string;
-  franja_inicio?: string;
-  franja_fin?: string;
+  start_time?: string;
+  end_time?: string;
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -26,24 +25,18 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 /**
  * Valida los campos de crear cita.
  * Espeja las reglas de BookAppointmentRequest:
- *   patient_id: required, uuid
  *   doctor_id: required, uuid
- *   franja_inicio: required, date, after:now, no más de 1 año en el futuro
- *   franja_fin: required, date, after:franja_inicio, exactamente 30 min después
+ *   start_time: required, date, after:now, no más de 1 año en el futuro
+ *   end_time: required, date, after:start_time, exactamente 30 min después
+ *
+ * Nota: patient_id lo infiere el backend de la sesión autenticada.
  */
 export function validateBooking(data: {
-  patient_id: string;
   doctor_id: string;
-  franja_inicio: string;
-  franja_fin: string;
+  start_time: string;
+  end_time: string;
 }): BookingValidationErrors {
   const errs: BookingValidationErrors = {};
-
-  if (!data.patient_id) {
-    errs.patient_id = 'El ID del paciente es obligatorio.';
-  } else if (!UUID_REGEX.test(data.patient_id)) {
-    errs.patient_id = 'ID de paciente inválido.';
-  }
 
   if (!data.doctor_id) {
     errs.doctor_id = 'El ID del médico es obligatorio.';
@@ -51,39 +44,39 @@ export function validateBooking(data: {
     errs.doctor_id = 'ID de médico inválido.';
   }
 
-  if (!data.franja_inicio) {
-    errs.franja_inicio = 'La fecha y hora de inicio es obligatoria.';
+  if (!data.start_time) {
+    errs.start_time = 'La fecha y hora de inicio es obligatoria.';
   } else {
-    const inicio = new Date(data.franja_inicio);
+    const inicio = new Date(data.start_time);
     if (isNaN(inicio.getTime())) {
-      errs.franja_inicio = 'Formato de fecha inválido.';
+      errs.start_time = 'Formato de fecha inválido.';
     } else {
       const now = new Date();
       if (inicio <= now) {
-        errs.franja_inicio = 'La cita debe ser en el futuro.';
+        errs.start_time = 'La cita debe ser en el futuro.';
       }
       const oneYearFromNow = new Date(now);
       oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
       if (inicio > oneYearFromNow) {
-        errs.franja_inicio = 'No se puede reservar a más de 1 año en el futuro.';
+        errs.start_time = 'No se puede reservar a más de 1 año en el futuro.';
       }
     }
   }
 
-  if (!data.franja_fin) {
-    errs.franja_fin = 'La fecha y hora de fin es obligatoria.';
-  } else if (data.franja_inicio) {
-    const inicio = new Date(data.franja_inicio);
-    const fin = new Date(data.franja_fin);
+  if (!data.end_time) {
+    errs.end_time = 'La fecha y hora de fin es obligatoria.';
+  } else if (data.start_time) {
+    const inicio = new Date(data.start_time);
+    const fin = new Date(data.end_time);
     if (isNaN(fin.getTime())) {
-      errs.franja_fin = 'Formato de fecha inválido.';
+      errs.end_time = 'Formato de fecha inválido.';
     } else if (fin <= inicio) {
-      errs.franja_fin = 'La hora de fin debe ser posterior a la de inicio.';
+      errs.end_time = 'La hora de fin debe ser posterior a la de inicio.';
     } else {
       const diffMs = fin.getTime() - inicio.getTime();
       const diffMin = diffMs / (1000 * 60);
       if (diffMin !== 30) {
-        errs.franja_fin = 'La duración de la cita debe ser exactamente 30 minutos.';
+        errs.end_time = 'La duración de la cita debe ser exactamente 30 minutos.';
       }
     }
   }
@@ -115,7 +108,7 @@ export function validateCancel(data: { reason: string }): CancelValidationErrors
 // ── Helpers de idempotencia ────────────────────────────────────────────
 
 /**
- * Genera un UUID v4 para el header X-Idempotency-Key.
+ * Genera un UUID v4 para el header Idempotency-Key.
  * Usa crypto.randomUUID() del navegador.
  */
 export function generateIdempotencyKey(): string {
@@ -142,4 +135,54 @@ export function refundLabel(refundStatus: string, refundPercentage: number): str
     return 'Sin reembolso (cancelación con menos de 24h de anticipación)';
   }
   return refundStatus;
+}
+
+// ── Validación para reprogramación (espeja RF-11) ──────────────────────
+
+export interface RescheduleValidationErrors {
+  requested_start?: string;
+  requested_end?: string;
+  reason?: string;
+}
+
+export function validateReschedule(data: {
+  requested_start: string;
+  requested_end: string;
+  reason: string;
+}): RescheduleValidationErrors {
+  const errs: RescheduleValidationErrors = {};
+
+  if (!data.requested_start) {
+    errs.requested_start = 'La nueva fecha de inicio es obligatoria.';
+  } else {
+    const start = new Date(data.requested_start);
+    if (isNaN(start.getTime())) {
+      errs.requested_start = 'Formato de fecha inválido.';
+    } else if (start <= new Date()) {
+      errs.requested_start = 'La nueva cita debe ser en el futuro.';
+    }
+  }
+
+  if (!data.requested_end) {
+    errs.requested_end = 'La nueva fecha de fin es obligatoria.';
+  } else if (data.requested_start) {
+    const start = new Date(data.requested_start);
+    const end = new Date(data.requested_end);
+    if (isNaN(end.getTime())) {
+      errs.requested_end = 'Formato de fecha inválido.';
+    } else {
+      const diffMin = (end.getTime() - start.getTime()) / 60_000;
+      if (diffMin !== 30) {
+        errs.requested_end = 'La duración debe ser exactamente 30 minutos.';
+      }
+    }
+  }
+
+  if (!data.reason) {
+    errs.reason = 'El motivo de reprogramación es obligatorio.';
+  } else if (data.reason.length > 500) {
+    errs.reason = 'El motivo no puede exceder 500 caracteres.';
+  }
+
+  return errs;
 }

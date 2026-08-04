@@ -24,6 +24,7 @@ import SpinnerLoader from '@/components/ui/SpinnerLoader.vue';
 import ErrorFallback from '@/components/ui/ErrorFallback.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import { getInitials, getAvatarColor } from '@/lib/mockData';
+import { formatInUserTimezone } from '@/lib/timezone';
 import {
   validateBooking,
   generateIdempotencyKey,
@@ -31,7 +32,6 @@ import {
 } from '@/lib/appointmentHelpers';
 import type { PublicDoctor } from '@/types/public.types';
 import type { Slot, AvailabilityResponse } from '@/types/api.types';
-import { usePage } from '@inertiajs/vue3';
 
 // ── Props de Inertia ───────────────────────────────────────────────────
 const props = withDefaults(
@@ -42,15 +42,6 @@ const props = withDefaults(
     doctors: () => [],
   },
 );
-
-// ── Auth — patient_id del usuario autenticado ──────────────────────────
-const page = usePage();
-const authUserId = computed<string>(() => {
-  const auth = (page.props as Record<string, unknown>).auth as
-    | { user?: { id?: string } }
-    | undefined;
-  return auth?.user?.id ?? '';
-});
 
 // ── Wizard state ───────────────────────────────────────────────────────
 type Step = 1 | 2 | 3;
@@ -76,8 +67,9 @@ async function fetchAvailability(doctorId: string, date: string) {
   slots.value = [];
 
   try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const res = await fetch(
-      `/api/doctors/${doctorId}/availability?date=${date}`,
+      `/api/availability?doctor_id=${doctorId}&date=${date}&timezone=${encodeURIComponent(tz)}`,
       {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin',
@@ -86,7 +78,7 @@ async function fetchAvailability(doctorId: string, date: string) {
 
     if (res.ok) {
       const json: AvailabilityResponse = await res.json();
-      slots.value = json.slots;
+      slots.value = json.available_slots;
       doctorTimezone.value = json.timezone;
       slotEstado.value = 'listo';
     } else if (res.status === 422) {
@@ -143,10 +135,9 @@ async function confirmBooking() {
   if (!selectedDoctor.value || !selectedSlot.value) return;
 
   const payload = {
-    patient_id: authUserId.value,
     doctor_id: selectedDoctor.value.id,
-    franja_inicio: selectedSlot.value.start,
-    franja_fin: selectedSlot.value.end,
+    start_time: selectedSlot.value.start,
+    end_time: selectedSlot.value.end,
   };
 
   const errs = validateBooking(payload);
@@ -165,7 +156,7 @@ async function confirmBooking() {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'X-XSRF-TOKEN': getCsrfToken(),
-        'X-Idempotency-Key': generateIdempotencyKey(),
+        'Idempotency-Key': generateIdempotencyKey(),
       },
       credentials: 'same-origin',
       body: JSON.stringify(payload),
@@ -207,6 +198,16 @@ const STEPS = [
 
 function todayISO(): string {
   return new Date().toISOString().split('T')[0];
+}
+
+function formatSlotTime(iso: string): string {
+  const tz = doctorTimezone.value || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return formatInUserTimezone(iso, tz, {
+    timeZone: tz,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
 }
 </script>
 
@@ -318,8 +319,8 @@ function todayISO(): string {
             :disabled="!slot.available"
             @click="selectSlot(slot)"
           >
-            <span class="slot-btn__time">{{ slot.local_start }}</span>
-            <span class="slot-btn__range">{{ slot.local_start }} – {{ slot.local_end }}</span>
+            <span class="slot-btn__time">{{ formatSlotTime(slot.start) }}</span>
+            <span class="slot-btn__range">{{ formatSlotTime(slot.start) }} – {{ formatSlotTime(slot.end) }}</span>
             <span v-if="!slot.available" class="slot-btn__badge">Ocupado</span>
           </button>
         </div>
@@ -363,7 +364,7 @@ function todayISO(): string {
             <div class="confirm-card__row">
               <span class="confirm-card__label">Horario</span>
               <span class="confirm-card__value">
-                {{ selectedSlot?.local_start }} – {{ selectedSlot?.local_end }}
+                {{ formatSlotTime(selectedSlot!.start) }} – {{ formatSlotTime(selectedSlot!.end) }}
               </span>
             </div>
             <div class="confirm-card__row">

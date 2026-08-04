@@ -135,9 +135,9 @@ async function submitCancel() {
 
     if (res.ok) {
       const json = await res.json();
-      cancelResult.value = json.data;
+      cancelResult.value = json;
       // Actualizar estado local
-      const idx = items.value.findIndex((a) => a.id === cancelTarget.value!.id);
+      const idx = items.value.findIndex((a) => a.id === json.appointment_id);
       if (idx >= 0) {
         items.value[idx] = { ...items.value[idx], status: 'cancelled' };
       }

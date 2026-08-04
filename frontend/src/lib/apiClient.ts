@@ -93,15 +93,14 @@ export async function cancelAppointment(
     signal?.throwIfAborted();
     return {
       ...mockCancelledAppointment,
-      id: appointmentId,
-      cancellation_reason: reason,
+      appointment_id: appointmentId,
     };
   }
 
   const res = await fetch(`/api/appointments/${appointmentId}/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cancellation_reason: reason }),
+    body: JSON.stringify({ reason }),
     signal,
     credentials: 'include',
   });
