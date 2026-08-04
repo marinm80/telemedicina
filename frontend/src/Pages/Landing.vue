@@ -198,6 +198,25 @@ function formatFee(fee: number): string {
       </div>
     </section>
 
+    <!-- ===== CTA — Registro / Login ===== -->
+    <section class="cta-banner">
+      <div class="cta-banner__inner">
+        <p class="cta-banner__text">
+          Para agendar una cita, crea tu cuenta o inicia sesión.
+        </p>
+        <div class="cta-banner__actions">
+          <a href="/register" class="cta-banner__btn cta-banner__btn--primary">
+            <i class="pi pi-user-plus" aria-hidden="true" />
+            Crear cuenta
+          </a>
+          <a href="/login" class="cta-banner__btn cta-banner__btn--outline">
+            <i class="pi pi-sign-in" aria-hidden="true" />
+            Iniciar sesión
+          </a>
+        </div>
+      </div>
+    </section>
+
   </LandingLayout>
 
   <!-- RF-23 Asistente Informativo (Landing) -->
@@ -589,6 +608,74 @@ function formatFee(fee: number): string {
 .doc-card__cta:hover:not(:disabled) { background-color: var(--color-primary-600); }
 .doc-card__cta:disabled { opacity: 0.6; cursor: not-allowed; }
 .doc-card__cta:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ===== CTA BANNER ===== */
+.cta-banner {
+  padding: var(--spacing-6) var(--spacing-4);
+  background: linear-gradient(135deg, var(--color-primary-50) 0%, var(--color-surface-50) 100%);
+  text-align: center;
+}
+
+.cta-banner__inner {
+  max-width: 36rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-4);
+}
+
+.cta-banner__text {
+  font-size: var(--text-base);
+  color: var(--color-text-strong);
+  margin: 0;
+}
+
+.cta-banner__actions {
+  display: flex;
+  gap: var(--spacing-3);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.cta-banner__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-5);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  font-family: var(--font-body);
+  text-decoration: none;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.cta-banner__btn--primary {
+  background-color: var(--color-primary-700);
+  color: var(--color-surface-0);
+  border: none;
+}
+
+.cta-banner__btn--primary:hover {
+  background-color: var(--color-primary-600);
+}
+
+.cta-banner__btn--outline {
+  background-color: transparent;
+  color: var(--color-primary-700);
+  border: 1px solid var(--color-primary-400);
+}
+
+.cta-banner__btn--outline:hover {
+  background-color: var(--color-primary-50);
+}
+
+.cta-banner__btn:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
