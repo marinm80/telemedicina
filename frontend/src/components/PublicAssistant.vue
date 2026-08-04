@@ -177,8 +177,8 @@ async function scrollToBottom() {
   position: fixed;
   bottom: calc(56px + var(--spacing-5) + var(--spacing-3));
   right: var(--spacing-5);
-  width: 380px;
-  max-height: 520px;
+  width: 440px;
+  max-height: 620px;
   background-color: var(--color-surface-0);
   border: 1px solid var(--color-surface-200);
   border-radius: var(--radius-lg);
@@ -240,8 +240,8 @@ async function scrollToBottom() {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-2);
-  min-height: 200px;
-  max-height: 340px;
+  min-height: 260px;
+  max-height: 440px;
 }
 
 .pub-assist__welcome {
