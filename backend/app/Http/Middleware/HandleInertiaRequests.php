@@ -48,17 +48,17 @@ class HandleInertiaRequests extends Middleware
                 ] : null,
             ],
             'booking' => fn () => $request->user() ? [
-                'specialties' => \DB::table('specialties')
+                'specialties' => \DB::connection('pgsql_admin')->table('specialties')
                     ->where('is_active', true)
                     ->orderBy('name')
                     ->get(['id', 'name']),
-                'doctors' => \DB::table('v_doctor_directory')
+                'doctors' => \DB::connection('pgsql_admin')->table('v_doctor_directory')
                     ->get(['doctor_profile_id', 'user_id', 'name', 'last_name'])
                     ->map(fn ($d) => [
                         'doctor_profile_id' => $d->doctor_profile_id,
                         'user_id'           => $d->user_id,
                         'full_name'         => trim("{$d->name} {$d->last_name}"),
-                        'specialties'       => \DB::table('doctor_specialties')
+                        'specialties'       => \DB::connection('pgsql_admin')->table('doctor_specialties')
                             ->join('specialties', 'specialties.id', '=', 'doctor_specialties.specialty_id')
                             ->where('doctor_specialties.doctor_profile_id', $d->doctor_profile_id)
                             ->pluck('specialties.name')
