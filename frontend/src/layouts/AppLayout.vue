@@ -8,13 +8,13 @@
   <div class="layout-wrapper">
     <DemoBanner />
     <div class="app-layout">
-      <AppSidebar @switch-role="handleRoleSwitch" />
+      <AppSidebar @switch-role="handleRoleSwitch" @start-booking="triggerBooking" />
       <main class="app-layout__main">
         <slot />
       </main>
     </div>
     <AppFooter />
-    <FloatingAssistant />
+    <FloatingAssistant ref="assistantRef" />
   </div>
 </template>
 
@@ -30,12 +30,18 @@ const page = usePage()
 const user = computed(() => (page.props as any).auth?.user || {})
 
 const activeViewRole = ref(user.value.role || 'patient')
+const assistantRef = ref<InstanceType<typeof FloatingAssistant> | null>(null)
 
 const handleRoleSwitch = (role: string) => {
   activeViewRole.value = role
 }
 
+const triggerBooking = () => {
+  assistantRef.value?.startBookingFlow()
+}
+
 provide('activeViewRole', activeViewRole)
+provide('startBooking', triggerBooking)
 </script>
 
 <style scoped>

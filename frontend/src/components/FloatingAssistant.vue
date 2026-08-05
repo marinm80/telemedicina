@@ -1,4 +1,9 @@
-<!-- AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev -->
+<!--
+  ====================================================================
+  FloatingAssistant — Agente conversacional para agendamiento de citas
+  AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
+  ====================================================================
+-->
 <template>
   <div class="floating-assistant">
     <!-- Chat Panel -->
@@ -17,22 +22,105 @@
         <div class="chat-messages" ref="messagesContainer">
           <div v-for="(msg, index) in messages" :key="index" :class="['message-wrapper', msg.role]">
             <div class="message-bubble">
-              <p>{{ msg.text }}</p>
+              <p v-html="msg.text"></p>
             </div>
           </div>
-          
-          <div v-if="showQuickActions" class="quick-actions">
-            <button class="quick-action-btn" @click="navigate('/directory')">
-              📅 Agendar cita
-            </button>
-            <button class="quick-action-btn" @click="navigate('/directory')">
-              🔍 Buscar médico
-            </button>
-            <button class="quick-action-btn" @click="navigate('/appointments')">
-              📋 Mis citas
-            </button>
+
+          <!-- Interactive elements based on booking step -->
+
+          <!-- Specialty selection -->
+          <div v-if="bookingStep === 'especialidad'" class="interactive-block">
+            <div class="chips-grid">
+              <button
+                v-for="sp in specialties"
+                :key="sp.id"
+                class="chip-btn"
+                @click="selectSpecialty(sp)"
+              >
+                {{ sp.name }}
+              </button>
+            </div>
           </div>
 
+          <!-- Doctor selection -->
+          <div v-if="bookingStep === 'doctor'" class="interactive-block">
+            <div v-if="matchingDoctors.length === 0" class="empty-notice">
+              No hay médicos disponibles para esta especialidad.
+            </div>
+            <div v-else class="doctor-cards">
+              <button
+                v-for="doc in matchingDoctors"
+                :key="doc.doctor_profile_id"
+                class="doctor-card"
+                @click="selectDoctor(doc)"
+              >
+                <div class="doctor-avatar" :style="{ backgroundColor: avatarColor(doc.full_name) }">
+                  {{ initials(doc.full_name) }}
+                </div>
+                <div class="doctor-info">
+                  <strong>{{ doc.full_name }}</strong>
+                  <small>{{ doc.specialties.join(', ') }}</small>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Date selection -->
+          <div v-if="bookingStep === 'fecha'" class="interactive-block">
+            <input
+              type="date"
+              class="date-input"
+              :min="minDate"
+              :max="maxDate"
+              v-model="selectedDate"
+              @change="selectDate"
+            />
+          </div>
+
+          <!-- Slot selection -->
+          <div v-if="bookingStep === 'horario'" class="interactive-block">
+            <div v-if="loadingSlots" class="loading-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <div v-else-if="availableSlots.length === 0" class="empty-notice">
+              No hay horarios disponibles para esta fecha. Intenta otro día.
+              <button class="chip-btn" @click="bookingStep = 'fecha'; addMessage('assistant', '¿Qué otro día te conviene?')">
+                Elegir otra fecha
+              </button>
+            </div>
+            <div v-else class="slots-grid">
+              <button
+                v-for="slot in availableSlots"
+                :key="slot.slot_start"
+                class="slot-btn"
+                :class="{ 'slot-btn--unavailable': !slot.available }"
+                :disabled="!slot.available"
+                @click="selectSlot(slot)"
+              >
+                {{ slot.local_start_time }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Confirmation -->
+          <div v-if="bookingStep === 'confirmacion'" class="interactive-block">
+            <div class="confirm-card">
+              <div class="confirm-row"><strong>Médico:</strong> {{ booking.doctorName }}</div>
+              <div class="confirm-row"><strong>Fecha:</strong> {{ booking.fecha }}</div>
+              <div class="confirm-row"><strong>Hora:</strong> {{ booking.slotLocalTime }}</div>
+              <div class="confirm-row"><strong>Motivo:</strong> {{ booking.motivo }}</div>
+              <div class="confirm-actions">
+                <button class="confirm-btn confirm-btn--yes" @click="confirmBooking" :disabled="submitting">
+                  {{ submitting ? 'Agendando...' : '✅ Confirmar Cita' }}
+                </button>
+                <button class="confirm-btn confirm-btn--no" @click="cancelBooking">
+                  ❌ Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Typing indicator -->
           <div v-if="isTyping" class="message-wrapper assistant">
             <div class="message-bubble typing-indicator">
               <span></span><span></span><span></span>
@@ -41,15 +129,15 @@
         </div>
 
         <footer class="chat-footer">
-          <form @submit.prevent="sendMessage" class="chat-input-form">
-            <input 
-              type="text" 
-              v-model="newMessage" 
-              placeholder="Escribe tu mensaje..."
+          <form @submit.prevent="handleUserInput" class="chat-input-form">
+            <input
+              type="text"
+              v-model="userInput"
+              :placeholder="inputPlaceholder"
               class="chat-input"
-              :disabled="isTyping"
+              :disabled="isTyping || isInputDisabled"
             />
-            <button type="submit" class="chat-send" :disabled="!newMessage.trim() || isTyping">
+            <button type="submit" class="chat-send" :disabled="!userInput.trim() || isTyping || isInputDisabled">
               <i class="pi pi-send"></i>
             </button>
           </form>
@@ -65,63 +153,311 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue';
+import { ref, reactive, computed, nextTick, watch } from 'vue';
+import { usePage } from '@inertiajs/vue3';
 
+// ── Types ──
 interface Message {
   role: 'assistant' | 'user';
   text: string;
 }
 
+interface SlotInfo {
+  slot_start: string;
+  slot_end: string;
+  local_start_time: string;
+  local_end_time: string;
+  available: boolean;
+}
+
+type BookingStep = 'idle' | 'motivo' | 'especialidad' | 'doctor' | 'fecha' | 'horario' | 'confirmacion' | 'done';
+
+// ── State ──
 const isOpen = ref(false);
 const isTyping = ref(false);
-const newMessage = ref('');
+const userInput = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
+const bookingStep = ref<BookingStep>('idle');
+const loadingSlots = ref(false);
+const submitting = ref(false);
+const selectedDate = ref('');
+const availableSlots = ref<SlotInfo[]>([]);
 
 const messages = ref<Message[]>([
   {
     role: 'assistant',
-    text: 'Hola 👋 Soy el asistente virtual de Salvia. ¿En qué puedo ayudarte? Puedo agendar citas, buscar especialistas o resolver dudas sobre tus consultas.'
+    text: 'Hola 👋 Soy el asistente de <strong>Salvia</strong>. Puedo ayudarte a agendar citas, buscar médicos y responder tus dudas. ¿Qué necesitas?'
   }
 ]);
 
-const showQuickActions = ref(true);
+const booking = reactive({
+  motivo: '',
+  specialtyId: '',
+  specialtyName: '',
+  doctorId: '',
+  doctorProfileId: '',
+  doctorName: '',
+  fecha: '',
+  slotStart: '',
+  slotEnd: '',
+  slotLocalTime: '',
+});
 
-const toggleChat = () => {
-  isOpen.value = !isOpen.value;
-};
+// ── Inertia shared data ──
+const page = usePage();
+const specialties = computed(() => (page.props as any).booking?.specialties || []);
+const allDoctors = computed(() => (page.props as any).booking?.doctors || []);
+const authUser = computed(() => (page.props as any).auth?.user);
 
-const scrollToBottom = async () => {
+const matchingDoctors = computed(() => {
+  if (!booking.specialtyName) return allDoctors.value;
+  return allDoctors.value.filter((d: any) =>
+    d.specialties.includes(booking.specialtyName)
+  );
+});
+
+// ── Computed ──
+const minDate = computed(() => {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split('T')[0];
+});
+
+const maxDate = computed(() => {
+  const d = new Date();
+  d.setDate(d.getDate() + 60);
+  return d.toISOString().split('T')[0];
+});
+
+const isInputDisabled = computed(() => {
+  return ['especialidad', 'doctor', 'fecha', 'horario', 'confirmacion', 'done'].includes(bookingStep.value);
+});
+
+const inputPlaceholder = computed(() => {
+  if (bookingStep.value === 'motivo') return 'Escribe el motivo de tu consulta...';
+  if (isInputDisabled.value) return 'Selecciona una opción arriba...';
+  return 'Escribe tu mensaje...';
+});
+
+// ── Helpers ──
+function addMessage(role: 'assistant' | 'user', text: string) {
+  messages.value.push({ role, text });
+  scrollToBottom();
+}
+
+async function scrollToBottom() {
   await nextTick();
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
-};
+}
 
-const navigate = (url: string) => {
-  isOpen.value = false;
-  window.location.href = url;
-};
+function initials(name: string): string {
+  return name.split(' ').map(w => w.charAt(0)).slice(0, 2).join('').toUpperCase();
+}
 
-const sendMessage = () => {
-  if (!newMessage.value.trim()) return;
+function avatarColor(name: string): string {
+  const colors = ['#1D4ED8', '#15803D', '#B91C1C', '#854D0E', '#7C3AED', '#0E7490', '#BE185D'];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length]!;
+}
 
-  messages.value.push({ role: 'user', text: newMessage.value });
-  newMessage.value = '';
-  showQuickActions.value = false;
-  scrollToBottom();
-  
+function resetBooking() {
+  bookingStep.value = 'idle';
+  Object.assign(booking, {
+    motivo: '', specialtyId: '', specialtyName: '',
+    doctorId: '', doctorProfileId: '', doctorName: '',
+    fecha: '', slotStart: '', slotEnd: '', slotLocalTime: '',
+  });
+  selectedDate.value = '';
+  availableSlots.value = [];
+}
+
+// ── Chat toggle ──
+function toggleChat() {
+  isOpen.value = !isOpen.value;
+}
+
+// Opens chat and starts booking flow (called from sidebar CTA)
+function startBookingFlow() {
+  isOpen.value = true;
+  if (bookingStep.value !== 'idle') return; // already in flow
+  bookingStep.value = 'motivo';
+  addMessage('assistant', '¡Perfecto! Vamos a agendar tu cita. 📅<br><br>Primero, <strong>¿cuál es el motivo de tu consulta?</strong>');
+}
+
+// Expose for parent (AppLayout) to call
+defineExpose({ startBookingFlow });
+
+// ── User input handler ──
+function handleUserInput() {
+  const text = userInput.value.trim();
+  if (!text) return;
+
+  addMessage('user', text);
+  userInput.value = '';
+
+  if (bookingStep.value === 'idle') {
+    // Check if user wants to book
+    const bookingKeywords = ['agendar', 'cita', 'turno', 'reservar', 'consulta', 'doctor', 'médico', 'medico'];
+    const wantsBooking = bookingKeywords.some(k => text.toLowerCase().includes(k));
+
+    if (wantsBooking) {
+      bookingStep.value = 'motivo';
+      simulateTyping('¡Claro! Vamos a agendar tu cita. 📅<br><br>Primero, <strong>¿cuál es el motivo de tu consulta?</strong>');
+    } else {
+      // General info response
+      simulateTyping('Puedo ayudarte con:<br>• <strong>Agendar citas</strong> con especialistas<br>• <strong>Buscar médicos</strong> por especialidad<br>• <strong>Información</strong> sobre horarios y disponibilidad<br><br>Escribe "agendar cita" para comenzar, o hazme cualquier pregunta. 😊');
+    }
+    return;
+  }
+
+  if (bookingStep.value === 'motivo') {
+    booking.motivo = text;
+    bookingStep.value = 'especialidad';
+    simulateTyping('Entendido. <strong>¿Qué especialidad necesitas?</strong> Selecciona una opción:');
+    return;
+  }
+}
+
+function simulateTyping(responseText: string, delay = 1000) {
   isTyping.value = true;
-  
+  scrollToBottom();
   setTimeout(() => {
     isTyping.value = false;
-    messages.value.push({ 
-      role: 'assistant', 
-      text: 'Gracias por tu mensaje. Nuestro equipo de soporte te responderá pronto. Mientras tanto, puedes usar las opciones rápidas para gestionar tus citas.' 
+    addMessage('assistant', responseText);
+  }, delay);
+}
+
+// ── Booking step handlers ──
+function selectSpecialty(sp: any) {
+  booking.specialtyId = sp.id;
+  booking.specialtyName = sp.name;
+  addMessage('user', `🏥 ${sp.name}`);
+
+  const docs = matchingDoctors.value;
+  if (docs.length === 0) {
+    bookingStep.value = 'especialidad';
+    simulateTyping('No hay médicos disponibles para esa especialidad en este momento. <strong>¿Deseas elegir otra?</strong>');
+  } else {
+    bookingStep.value = 'doctor';
+    simulateTyping(`Tenemos <strong>${docs.length} médico(s)</strong> de ${sp.name}. <strong>¿Con cuál deseas agendar?</strong>`);
+  }
+}
+
+function selectDoctor(doc: any) {
+  booking.doctorId = doc.user_id;
+  booking.doctorProfileId = doc.doctor_profile_id;
+  booking.doctorName = doc.full_name;
+  addMessage('user', `👨‍⚕️ ${doc.full_name}`);
+  bookingStep.value = 'fecha';
+  simulateTyping(`Excelente elección. <strong>¿Qué día te gustaría agendar?</strong> Selecciona una fecha:`);
+}
+
+async function selectDate() {
+  if (!selectedDate.value) return;
+  booking.fecha = selectedDate.value;
+  addMessage('user', `📅 ${selectedDate.value}`);
+  bookingStep.value = 'horario';
+  addMessage('assistant', 'Consultando horarios disponibles...');
+  loadingSlots.value = true;
+  scrollToBottom();
+
+  try {
+    const res = await fetch(`/api/doctors/${booking.doctorId}/availability?date=${selectedDate.value}&timezone=${authUser.value?.timezone || 'UTC'}`, {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
     });
-    showQuickActions.value = true;
-    scrollToBottom();
-  }, 1500);
-};
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    availableSlots.value = data.slots || [];
+    loadingSlots.value = false;
+
+    // Remove the "consultando" message
+    messages.value.pop();
+
+    if (availableSlots.value.filter(s => s.available).length > 0) {
+      const count = availableSlots.value.filter(s => s.available).length;
+      addMessage('assistant', `Hay <strong>${count} horario(s) disponibles</strong> el ${selectedDate.value}. <strong>¿Cuál prefieres?</strong>`);
+    } else {
+      addMessage('assistant', 'No hay horarios disponibles para esa fecha.');
+    }
+  } catch (err) {
+    loadingSlots.value = false;
+    messages.value.pop();
+    addMessage('assistant', '⚠️ No pude consultar la disponibilidad. Intenta con otra fecha.');
+    bookingStep.value = 'fecha';
+    selectedDate.value = '';
+  }
+}
+
+function selectSlot(slot: SlotInfo) {
+  booking.slotStart = slot.slot_start;
+  booking.slotEnd = slot.slot_end;
+  booking.slotLocalTime = `${slot.local_start_time} - ${slot.local_end_time}`;
+  addMessage('user', `🕐 ${slot.local_start_time}`);
+  bookingStep.value = 'confirmacion';
+  simulateTyping('Perfecto. Revisa los datos de tu cita y confirma:', 600);
+}
+
+async function confirmBooking() {
+  submitting.value = true;
+  const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+  const idempotencyKey = crypto.randomUUID();
+
+  try {
+    const res = await fetch('/api/appointments', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrfToken || '',
+        'X-Idempotency-Key': idempotencyKey,
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify({
+        patient_id: authUser.value?.id,
+        doctor_id: booking.doctorId,
+        franja_inicio: booking.slotStart,
+        franja_fin: booking.slotEnd,
+      }),
+    });
+
+    submitting.value = false;
+
+    if (res.ok) {
+      bookingStep.value = 'done';
+      addMessage('assistant', '🎉 <strong>¡Tu cita ha sido agendada exitosamente!</strong><br><br>📋 Puedes verla en <strong>"Mis Citas"</strong> en el menú lateral.<br><br>¿Necesitas algo más?');
+    } else if (res.status === 409) {
+      addMessage('assistant', '⚠️ Ese horario acaba de ser ocupado por otro paciente. Vamos a buscar otro horario.');
+      bookingStep.value = 'fecha';
+      selectedDate.value = '';
+    } else {
+      const data = await res.json().catch(() => ({}));
+      const errorMsg = data.message || 'Error al crear la cita';
+      addMessage('assistant', `⚠️ ${errorMsg}. Intenta de nuevo.`);
+      bookingStep.value = 'fecha';
+      selectedDate.value = '';
+    }
+  } catch (err) {
+    submitting.value = false;
+    addMessage('assistant', '⚠️ Error de conexión. Intenta de nuevo.');
+    bookingStep.value = 'confirmacion';
+  }
+}
+
+function cancelBooking() {
+  addMessage('user', 'Cancelar');
+  resetBooking();
+  addMessage('assistant', 'No hay problema. Si necesitas agendar más adelante, aquí estaré. 😊');
+}
+
+// Watch for scroll
+watch(messages, () => scrollToBottom(), { deep: true });
 </script>
 
 <style scoped>
@@ -137,232 +473,328 @@ const sendMessage = () => {
 }
 
 .floating-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-full, 9999px);
-  background-color: var(--color-primary, #0E5D52);
-  color: var(--color-white, #FFFFFF);
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary, #0E5D52), #148071);
+  color: #FFFFFF;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 24px;
   cursor: pointer;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  transition: transform 0.3s ease, background-color 0.3s ease;
-  animation: pulse-border 2s infinite;
+  box-shadow: 0 4px 14px rgba(14, 93, 82, 0.4);
+  transition: transform 0.3s, box-shadow 0.3s;
+  animation: pulse-ring 2s infinite;
 }
 
-.floating-btn:hover {
-  transform: scale(1.05);
-  background-color: var(--color-primary-dark, #0a463e);
-}
+.floating-btn:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(14, 93, 82, 0.5); }
+.floating-btn.is-open { animation: none; background: #4B5563; }
 
-.floating-btn.is-open {
-  animation: none;
-  background-color: var(--color-gray-600, #4B5563);
-}
-
-@keyframes pulse-border {
-  0% {
-    box-shadow: 0 0 0 0 rgba(14, 93, 82, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(14, 93, 82, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(14, 93, 82, 0);
-  }
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(14, 93, 82, 0.4); }
+  70% { box-shadow: 0 0 0 12px rgba(14, 93, 82, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(14, 93, 82, 0); }
 }
 
 .chat-panel {
-  width: 360px;
-  height: 500px;
-  background-color: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--color-gray-200, #E5E7EB);
-  border-radius: var(--radius-xl, 1rem);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  width: 380px;
+  height: 520px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.12);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transform-origin: bottom right;
 }
 
 .chat-header {
-  background-color: var(--color-primary, #0E5D52);
-  color: var(--color-white, #FFFFFF);
-  padding: var(--spacing-4, 16px);
+  background: linear-gradient(135deg, var(--color-primary, #0E5D52), #148071);
+  color: #FFF;
+  padding: 14px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top-left-radius: var(--radius-xl, 1rem);
-  border-top-right-radius: var(--radius-xl, 1rem);
 }
 
-.chat-header-title {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2, 8px);
-  font-weight: 600;
-  font-size: 1rem;
-}
-
-.chat-close {
-  background: transparent;
-  border: none;
-  color: var(--color-white, #FFFFFF);
-  cursor: pointer;
-  font-size: 1rem;
-  padding: var(--spacing-1, 4px);
-  opacity: 0.8;
-  transition: opacity 0.2s;
-}
-
-.chat-close:hover {
-  opacity: 1;
-}
+.chat-header-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.chat-close { background: transparent; border: none; color: #FFF; cursor: pointer; padding: 4px; opacity: 0.8; }
+.chat-close:hover { opacity: 1; }
 
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: var(--spacing-4, 16px);
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-3, 12px);
+  gap: 10px;
 }
 
-.message-wrapper {
-  display: flex;
-  width: 100%;
-}
-
-.message-wrapper.assistant {
-  justify-content: flex-start;
-}
-
-.message-wrapper.user {
-  justify-content: flex-end;
-}
+.message-wrapper { display: flex; width: 100%; }
+.message-wrapper.assistant { justify-content: flex-start; }
+.message-wrapper.user { justify-content: flex-end; }
 
 .message-bubble {
   max-width: 85%;
-  padding: var(--spacing-3, 12px) var(--spacing-4, 16px);
-  border-radius: var(--radius-lg, 0.5rem);
-  font-size: 0.9rem;
-  line-height: 1.4;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  line-height: 1.5;
   word-wrap: break-word;
 }
 
+.message-bubble p { margin: 0; }
+
 .assistant .message-bubble {
-  background-color: var(--color-gray-100, #F3F4F6);
-  color: var(--color-gray-800, #1F2937);
-  border-bottom-left-radius: 0;
+  background: #F3F4F6;
+  color: #1F2937;
+  border-bottom-left-radius: 2px;
 }
 
 .user .message-bubble {
-  background-color: var(--color-primary, #0E5D52);
-  color: var(--color-white, #FFFFFF);
-  border-bottom-right-radius: 0;
+  background: var(--color-primary, #0E5D52);
+  color: #FFF;
+  border-bottom-right-radius: 2px;
 }
 
-.message-bubble p {
-  margin: 0;
+/* Interactive blocks */
+.interactive-block {
+  padding: 8px 0;
+  width: 100%;
 }
 
-.quick-actions {
+.chips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--color-primary, #0E5D52);
+  background: #FFF;
+  color: var(--color-primary, #0E5D52);
+  border-radius: 20px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chip-btn:hover {
+  background: var(--color-primary, #0E5D52);
+  color: #FFF;
+}
+
+.doctor-cards {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2, 8px);
-  margin-top: var(--spacing-2, 8px);
+  gap: 8px;
 }
 
-.quick-action-btn {
-  background-color: var(--color-white, #FFFFFF);
-  border: 1px solid var(--color-primary-light, #148071);
-  color: var(--color-primary, #0E5D52);
-  padding: var(--spacing-2, 8px) var(--spacing-3, 12px);
-  border-radius: var(--radius-md, 0.375rem);
-  font-size: 0.85rem;
-  cursor: pointer;
-  text-align: left;
-  transition: all 0.2s ease;
-}
-
-.quick-action-btn:hover {
-  background-color: var(--color-primary-light, #148071);
-  color: var(--color-white, #FFFFFF);
-}
-
-.chat-footer {
-  padding: var(--spacing-3, 12px);
-  background-color: var(--color-white, #FFFFFF);
-  border-top: 1px solid var(--color-gray-200, #E5E7EB);
-}
-
-.chat-input-form {
+.doctor-card {
   display: flex;
-  gap: var(--spacing-2, 8px);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #FFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  width: 100%;
 }
+
+.doctor-card:hover {
+  border-color: var(--color-primary, #0E5D52);
+  box-shadow: 0 2px 8px rgba(14, 93, 82, 0.15);
+}
+
+.doctor-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFF;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.doctor-info { display: flex; flex-direction: column; }
+.doctor-info strong { font-size: 0.85rem; color: #111827; }
+.doctor-info small { font-size: 0.75rem; color: #6B7280; }
+
+.date-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #D1D5DB;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.date-input:focus { border-color: var(--color-primary, #0E5D52); }
+
+.slots-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.slot-btn {
+  padding: 8px 4px;
+  border: 1px solid var(--color-primary, #0E5D52);
+  background: #FFF;
+  color: var(--color-primary, #0E5D52);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.slot-btn:hover:not(:disabled) {
+  background: var(--color-primary, #0E5D52);
+  color: #FFF;
+}
+
+.slot-btn--unavailable {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-color: #D1D5DB;
+  color: #9CA3AF;
+}
+
+.confirm-card {
+  background: #FFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.confirm-row {
+  padding: 4px 0;
+  font-size: 0.85rem;
+  color: #374151;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.confirm-row:last-of-type { border-bottom: none; }
+
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.confirm-btn {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.confirm-btn--yes {
+  background: var(--color-primary, #0E5D52);
+  color: #FFF;
+}
+
+.confirm-btn--yes:hover:not(:disabled) { filter: brightness(1.1); }
+.confirm-btn--yes:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.confirm-btn--no {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.confirm-btn--no:hover { background: #FECACA; }
+
+.empty-notice {
+  text-align: center;
+  padding: 12px;
+  font-size: 0.85rem;
+  color: #6B7280;
+}
+
+.loading-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+}
+
+.loading-dots span {
+  width: 8px; height: 8px;
+  background: var(--color-primary, #0E5D52);
+  border-radius: 50%;
+  animation: bounce-dot 1.4s infinite ease-in-out both;
+}
+
+.loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes bounce-dot {
+  0%, 80%, 100% { transform: scale(0.4); }
+  40% { transform: scale(1); }
+}
+
+/* Footer */
+.chat-footer {
+  padding: 10px 12px;
+  background: #FFF;
+  border-top: 1px solid #E5E7EB;
+}
+
+.chat-input-form { display: flex; gap: 8px; }
 
 .chat-input {
   flex: 1;
-  padding: var(--spacing-2, 8px) var(--spacing-3, 12px);
-  border: 1px solid var(--color-gray-300, #D1D5DB);
-  border-radius: var(--radius-full, 9999px);
+  padding: 8px 14px;
+  border: 1px solid #D1D5DB;
+  border-radius: 20px;
   outline: none;
-  font-size: 0.9rem;
-  transition: border-color 0.2s;
-  background-color: var(--color-white, #FFFFFF);
+  font-size: 0.88rem;
+  background: #FFF;
 }
 
-.chat-input:focus {
-  border-color: var(--color-primary, #0E5D52);
-}
-
-.chat-input:disabled {
-  background-color: var(--color-gray-100, #F3F4F6);
-  cursor: not-allowed;
-}
+.chat-input:focus { border-color: var(--color-primary, #0E5D52); }
+.chat-input:disabled { background: #F9FAFB; cursor: not-allowed; }
 
 .chat-send {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-full, 9999px);
-  background-color: var(--color-primary, #0E5D52);
-  color: var(--color-white, #FFFFFF);
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--color-primary, #0E5D52);
+  color: #FFF;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color 0.2s;
 }
 
-.chat-send:hover:not(:disabled) {
-  background-color: var(--color-primary-dark, #0a463e);
-}
+.chat-send:hover:not(:disabled) { filter: brightness(1.1); }
+.chat-send:disabled { background: #D1D5DB; cursor: not-allowed; }
 
-.chat-send:disabled {
-  background-color: var(--color-gray-300, #D1D5DB);
-  cursor: not-allowed;
-}
-
+/* Typing indicator */
 .typing-indicator {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  height: 24px;
-  padding: 0 var(--spacing-4, 16px) !important;
+  display: flex; gap: 4px; align-items: center; height: 24px;
+  padding: 0 14px !important;
 }
 
 .typing-indicator span {
-  display: block;
-  width: 6px;
-  height: 6px;
-  background-color: var(--color-gray-500, #6B7280);
-  border-radius: 50%;
+  display: block; width: 6px; height: 6px;
+  background: #6B7280; border-radius: 50%;
   animation: typing 1.4s infinite ease-in-out both;
 }
 
@@ -374,14 +806,12 @@ const sendMessage = () => {
   40% { transform: scale(1); }
 }
 
-/* Animations */
-.slide-up-enter-active,
-.slide-up-leave-active {
+/* Transitions */
+.slide-up-enter-active, .slide-up-leave-active {
   transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.slide-up-enter-from,
-.slide-up-leave-to {
+.slide-up-enter-from, .slide-up-leave-to {
   opacity: 0;
   transform: translateY(20px) scale(0.9);
 }
@@ -390,16 +820,10 @@ const sendMessage = () => {
 @media (max-width: 480px) {
   .chat-panel {
     position: fixed;
-    bottom: 0;
-    right: 0;
-    width: 100%;
-    height: 100%;
+    bottom: 0; right: 0;
+    width: 100%; height: 100%;
     border-radius: 0;
   }
-  
-  .floating-assistant {
-    right: var(--spacing-4, 16px);
-    bottom: var(--spacing-4, 16px);
-  }
+  .floating-assistant { right: 16px; bottom: 16px; }
 }
 </style>

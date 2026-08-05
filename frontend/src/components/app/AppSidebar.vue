@@ -51,10 +51,10 @@
       </nav>
 
       <div v-if="showBookingCta" class="sidebar-cta">
-        <Link href="/directory" class="cta-btn">
+        <button type="button" class="cta-btn" @click="emit('start-booking')">
           <i class="pi pi-calendar-plus"></i>
           <span>Agendar Cita</span>
-        </Link>
+        </button>
       </div>
 
       <div class="sidebar-footer">
@@ -77,7 +77,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { usePage, Link, router } from '@inertiajs/vue3'
 
-const emit = defineEmits(['switch-role'])
+const emit = defineEmits(['switch-role', 'start-booking'])
 
 const page = usePage()
 const user = computed(() => (page.props as any).auth?.user || {})
