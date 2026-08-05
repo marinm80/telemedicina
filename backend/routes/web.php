@@ -72,10 +72,7 @@ Route::middleware('auth')->group(function () {
         'description' => 'Revisa ingresos, pagos y comisiones de la plataforma.',
     ]))->name('admin.facturacion');
 
-    Route::get('/admin/ajustes', fn() => Inertia::render('ComingSoon', [
-        'title' => 'Ajustes del Sistema',
-        'description' => 'Configura parámetros generales de la plataforma.',
-    ]))->name('admin.ajustes');
+    Route::get('/admin/ajustes', fn() => Inertia::render('Admin/SettingsManager'))->name('admin.ajustes');
 
     // Doctor
     Route::get('/admin/notas', fn() => Inertia::render('ComingSoon', [

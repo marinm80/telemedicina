@@ -70,5 +70,9 @@ Route::middleware(['web', SetPostgresSessionContext::class])->group(function () 
         Route::get('/schedules', [\App\Http\Controllers\Api\AdminScheduleController::class, 'index']);
         Route::post('/schedules', [\App\Http\Controllers\Api\AdminScheduleController::class, 'store']);
         Route::delete('/schedules/{id}', [\App\Http\Controllers\Api\AdminScheduleController::class, 'destroy']);
+
+        Route::get('/users', [\App\Http\Controllers\Api\AdminSettingsController::class, 'users']);
+        Route::patch('/users/{id}/password', [\App\Http\Controllers\Api\AdminSettingsController::class, 'changePassword']);
+        Route::patch('/users/{id}/role', [\App\Http\Controllers\Api\AdminSettingsController::class, 'updateUserRole']);
     });
 });
