@@ -9,41 +9,75 @@
 ## 1. Estructura Completa de Carpetas
 
 ```
-mi-proyecto/
-├── app/
-│   ├── Actions/                    # Lógica de Negocio (Una clase por operación)
-│   │   ├── Auth/
-│   │   ├── Clinical/
-│   │   ├── Appointments/
-│   │   ├── Billing/
-│   │   └── Consultations/
-│   ├── Http/
-│   │   ├── Controllers/            # Traductores de Transporte (Inertia / JSON)
-│   │   ├── Middleware/             # Filtros de Frontera (Contexto RLS, Roles)
-│   │   └── Requests/               # Validaciones de Entrada en la Frontera
-│   ├── Models/                     # Representación de Entidades y Global Scopes
-│   └── Policies/                   # Autorización de Negocio (Laravel Policies)
-├── bootstrap/
-│   └── app.php                     # Registro de Middlewares Globales
-├── config/
-│   └── database.php                # Configuración de pgsql (runtime) y pgsql_owner
-├── docs/
-│   ├── PRD.md                      # Especificación v2.0 Aprobada
-│   ├── DATABASE_SCHEMA.md          # DDL e índices RLS Aprobados
-│   └── AUTHORIZATION.md            # Protocolo de Seguridad RLS Aprobado
-├── resources/
-│   └── js/                         # Frontend Vue 3 (Inertia SPA)
-│       ├── Components/             # Componentes Reactivos con 4 Estados
-│       │   ├── Clinical/
-│       │   ├── Appointments/
-│       │   └── UI/
-│       ├── Composables/            # Ganchos de Estado y API (useUsers, useChat)
-│       └── Pages/                  # Vistas del Enrutador Inertia
-│           ├── Auth/
-│           ├── Clinical/
-│           ├── Appointments/
-│           └── Doctor/
+AI-Proyecto_11_Telemedicina/
+├── backend/                            # Laravel 11 (API + Inertia SSR)
+│   ├── app/
+│   │   ├── Actions/                    # Lógica de Negocio (Una clase por operación)
+│   │   │   ├── Auth/
+│   │   │   ├── Clinical/
+│   │   │   ├── Appointments/
+│   │   │   ├── Billing/
+│   │   │   └── Consultations/
+│   │   ├── Http/
+│   │   │   ├── Controllers/            # Traductores de Transporte (Inertia / JSON)
+│   │   │   │   └── DashboardController.php  # Dispatch por rol → props Inertia
+│   │   │   ├── Middleware/             # Filtros de Frontera
+│   │   │   │   ├── SetPostgresSessionContext.php  # RLS context
+│   │   │   │   └── HandleInertiaRequests.php      # Shared props + flash
+│   │   │   └── Requests/
+│   │   ├── Models/
+│   │   └── Policies/
+│   ├── routes/
+│   │   └── web.php                     # GET /admin → DashboardController@index
+│   └── resources/views/app.blade.php   # Punto de entrada Inertia
+│
+├── frontend/                           # Vue 3 + TypeScript + Vite + PrimeVue 4
+│   └── src/
+│       ├── assets/styles/
+│       │   ├── tokens.css              # ★ Paleta Salvia (Design System completo)
+│       │   └── base.css                # Reset + tipografía base
+│       ├── config/
+│       │   └── primevue.preset.ts      # ★ Preset PrimeVue → paleta Salvia
+│       ├── layouts/
+│       │   └── AppLayout.vue           # ★ Sidebar + provide(activeViewRole)
+│       ├── components/
+│       │   ├── app/                    # Estructura global
+│       │   │   ├── AppSidebar.vue      # ★ Nav por rol · Role switcher · User card
+│       │   │   └── DashboardHeader.vue # ★ Eyebrow + Título + Action
+│       │   ├── dashboard/             # Widgets reutilizables
+│       │   │   ├── StatCard.vue        # ★ KPI con trend
+│       │   │   ├── DataTable.vue       # ★ Tabla + filtros + slots
+│       │   │   ├── BarChart.vue        # ★ Barras CSS puro
+│       │   │   ├── AssistantWidget.vue # ★ Asistente IA
+│       │   │   ├── AlertCard.vue       # ★ Alertas urgentes
+│       │   │   └── ActivityFeed.vue    # ★ Timeline actividad
+│       │   ├── DemoBanner.vue          # ★ Banner demo/dev
+│       │   └── AppFooter.vue           # ★ Footer copyright
+│       ├── Pages/
+│       │   ├── Auth/
+│       │   │   ├── Login.vue
+│       │   │   └── Register.vue
+│       │   └── Dashboard/             # ★ 4 dashboards reescritos
+│       │       ├── AdminDashboard.vue  # Verificaciones + 4 KPIs + chart + widgets
+│       │       ├── DoctorDashboard.vue # Agenda del día + notas + chart
+│       │       ├── PatientDashboard.vue# Mis citas + recetas + chart
+│       │       └── AgentDashboard.vue  # Citas pendientes + acciones rápidas
+│       └── Composables/               # Ganchos de Estado y API
+│
+├── docs/                               # Documentación del proyecto
+│   ├── PRD.md                          # Especificación v2.0
+│   ├── DATABASE_SCHEMA.md              # DDL + RLS
+│   ├── AUTHORIZATION.md                # Protocolo de seguridad
+│   ├── MAPA_ARQUITECTURA.md            # Este archivo
+│   ├── UI_PROTOTYPE.md                 # Wireframes + 4 estados por vista
+│   ├── UI_COMPONENTS.md                # ★ Catálogo de componentes Salvia
+│   ├── CHANGELOG.md                    # ★ Log de cambios
+│   └── DECISIONES_ALCANCE.md           # Alcance y trade-offs
+│
+└── docker-compose.yml                  # postgres + redis + backend + frontend
 ```
+
+> **★** = Archivos creados o actualizados en el sprint Salvia (2026-08-05).
 
 ---
 

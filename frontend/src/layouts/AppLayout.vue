@@ -1,57 +1,72 @@
 <!--
   ====================================================================
-  AppLayout — Shell principal de la aplicación
+  AppLayout — Main application layout including sidebar and main content area
   AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
   ====================================================================
-
-  QUÉ FIJA ESTE COMPONENTE
-  Shell de tres franjas: DemoBanner (top) + contenido (main) + AppFooter.
-  Estructura de UI_PROTOTYPE.md §1:
-    AppLayout (Cintillo de Demo + Sidebar + Footer de Créditos)
-
-  El sidebar no se implementa en esta entrega (fuera de alcance):
-  las rutas de Inertia y la navegación dependen del backend.
-  La estructura del layout ya lo soporta con el slot lateral.
 -->
-<script setup lang="ts">
-import DemoBanner from './DemoBanner.vue';
-import AppFooter from './AppFooter.vue';
-</script>
-
 <template>
-  <div class="app-layout">
+  <div class="layout-wrapper">
     <DemoBanner />
-
-    <div class="app-layout__body">
-      <!-- Sidebar se agrega cuando las rutas de Inertia estén listas -->
+    <div class="app-layout">
+      <AppSidebar @switch-role="handleRoleSwitch" />
       <main class="app-layout__main">
         <slot />
       </main>
     </div>
-
     <AppFooter />
   </div>
 </template>
 
+<script setup lang="ts">
+import { ref, provide, computed } from 'vue'
+import { usePage } from '@inertiajs/vue3'
+import AppSidebar from '@/components/app/AppSidebar.vue'
+// Mock imports for DemoBanner and AppFooter as they were in the layout snippet
+// Ensure to import them properly in a real scenario
+import DemoBanner from '@/components/DemoBanner.vue'
+import AppFooter from '@/components/AppFooter.vue'
+
+const page = usePage()
+const user = computed(() => (page.props as any).auth?.user || {})
+
+const activeViewRole = ref(user.value.role || 'patient')
+
+const handleRoleSwitch = (role: string) => {
+  activeViewRole.value = role
+}
+
+provide('activeViewRole', activeViewRole)
+</script>
+
 <style scoped>
-.app-layout {
+.layout-wrapper {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  min-height: 100dvh;
-  background-color: var(--color-surface-50);
 }
 
-.app-layout__body {
+.app-layout {
   display: flex;
   flex: 1;
+  background-color: var(--color-page-bg, #FAF5EE);
+  min-height: 100vh;
 }
 
 .app-layout__main {
   flex: 1;
-  padding: var(--spacing-6);
-  max-width: 80rem;
-  margin: 0 auto;
-  width: 100%;
+  padding: var(--spacing-8, 2rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 919px) {
+  .app-layout {
+    flex-direction: column;
+  }
+  
+  .app-layout__main {
+    padding: var(--spacing-4, 1rem);
+  }
 }
 </style>

@@ -1,45 +1,67 @@
 /**
  * ====================================================================
- * Tokens de diseño — Plataforma de Telemedicina
+ * Tokens de diseño — Plataforma de Telemedicina "Salvia"
  * AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
  * ====================================================================
  *
+ * PALETA SALVIA: Dark Teal + Sage + Terracotta + Warm Cream
+ * Migrada desde la paleta blue/slate original para coincidir con
+ * el rediseño visual de referencia "Rediseño de sistema de citas médicas".
+ *
  * TRES CAPAS SEPARADAS: marca, estado y superficie.
  * Los tokens de estado NUNCA coinciden con los tokens de marca.
- * Info NO es azul (colisionaría con marca): va en neutral.
  *
- * REGLAS DE CONTRASTE (WCAG AA — verificadas por scripts/check-contrast.mjs):
+ * REGLAS DE CONTRASTE (WCAG AA):
  * - Texto normal (< 18pt):     ratio ≥ 4.5:1
  * - Texto grande (≥ 18pt):     ratio ≥ 3:1
  * - No-texto / WCAG 1.4.11:   ratio ≥ 3:1  (bordes, iconos, foco)
  *
- * REGLAS DERIVADAS DEL CÁLCULO:
- * 1. Warning NUNCA lleva texto blanco (blanco / warning-600 = 2.94, FALLA).
- *    Ámbar solo como fondo claro con texto oscuro (warning-800).
- * 2. Borde de controles es neutral-500 (#64748B), NO neutral-400.
- *    neutral-300 = 1.48, neutral-400 = 2.56: los dos FALLAN el 3:1
- *    que WCAG 1.4.11 pide para límites de componente.
- *    neutral-400 solo para divisores decorativos, nunca controles.
+ * REGLAS DERIVADAS:
+ * 1. Warning NUNCA lleva texto blanco.
+ * 2. Borde warm (#EDE4D8) suficiente contraste sobre --color-page-bg.
  */
 
 :root {
-  /* === MARCA (azul profundo — máxima separación con rojo y verde) === */
-  --color-primary-50:  #EFF6FF;
-  --color-primary-100: #DBEAFE;
-  --color-primary-500: #3B82F6;
-  --color-primary-600: #2563EB;
-  --color-primary-700: #1D4ED8;  /* acción principal */
-  --color-primary-900: #1E3A8A;
+  /* === PÁGINA === */
+  --color-page-bg: #FAF5EE;    /* warm cream — fondo general */
 
-  /* === ESTADO: error (rojo — distinguible de marca) === */
+  /* === MARCA (teal profundo — identidad Salvia) === */
+  --color-primary-50:  #E8F5F2;
+  --color-primary-100: #C8E6DE;
+  --color-primary-200: #A0D4C5;
+  --color-primary-300: #73BFAA;
+  --color-primary-400: #4FA997;
+  --color-primary-500: #2E9E6B;  /* teal principal */
+  --color-primary-600: #0E5D52;  /* deep teal — acciones, links */
+  --color-primary-700: #0B4D44;  /* acciones hover */
+  --color-primary-800: #093E37;
+  --color-primary-900: #17302B;  /* sidebar, botones primarios oscuros */
+
+  /* === ACENTO (sage/mint) === */
+  --color-accent:       #8FC9B3;  /* items activos sidebar, highlights */
+  --color-accent-soft:  #E3EFE9;  /* badge info background */
+  --color-accent-muted: #CFE3DA;  /* hover sutil */
+
+  /* === ALERTA (terracotta/rust) === */
+  --color-alert:      #D9603E;  /* badges urgentes, notificaciones */
+  --color-alert-dark: #B34A2A;  /* texto sobre fondo claro */
+  --color-alert-bg:   #FBEAE3;  /* fondo de alertas */
+  --color-alert-soft: #F2D6C9;  /* borde de alertas */
+
+  /* === SIDEBAR === */
+  --color-sidebar-bg:     #17302B;
+  --color-sidebar-text:   #B0C4BC;
+  --color-sidebar-active: rgba(143, 201, 179, 0.16);
+
+  /* === ESTADO: error (rojo — distinguible de marca y alerta) === */
   --color-error-50:  #FEF2F2;
   --color-error-100: #FEE2E2;
   --color-error-600: #DC2626;
   --color-error-700: #B91C1C;
 
   /* === ESTADO: éxito === */
-  --color-success-50:  #F0FDF4;
-  --color-success-700: #15803D;
+  --color-success-50:  #E6F4EC;
+  --color-success-700: #2E9E6B;
   --color-success-800: #166534;
 
   /* === ESTADO: advertencia (ámbar — NUNCA texto blanco encima) === */
@@ -47,12 +69,12 @@
   --color-warning-600: #CA8A04;
   --color-warning-800: #854D0E;
 
-  /* === ESTADO: información (neutral, NO azul) === */
-  --color-info-bg:   #F1F5F9;
-  --color-info-text: #334155;
+  /* === ESTADO: información (neutral) === */
+  --color-info-bg:   #E3EFE9;
+  --color-info-text: #0E5D52;
 
   /* === CLÍNICA (específicos de la sala de consulta) === */
-  --color-clinical-accent:       #1976D2;
+  --color-clinical-accent:       #0E5D52;
   --color-clinical-danger:       #D32F2F;
   --color-clinical-danger-bg:    #FFF5F5;
   --color-clinical-warning:      #854D0E;
@@ -60,18 +82,21 @@
 
   /* === SUPERFICIE === */
   --color-surface-0:   #FFFFFF;
-  --color-surface-50:  #F8FAFC;
-  --color-surface-100: #F1F5F9;
-  --color-surface-200: #E2E8F0;
+  --color-surface-50:  #FAF9F5;
+  --color-surface-100: #F4F1EA;
+  --color-surface-200: #EDE4D8;
 
   /* === TEXTO === */
-  --color-text-strong: #0F172A;  /* ratio 17.85 / blanco */
-  --color-text-muted:  #475569;  /* ratio  7.58 / blanco */
-  --color-text-subtle: #64748B;  /* ratio  4.76 / blanco — mínimo aceptable */
+  --color-text-strong:    #17302B;  /* dark green/charcoal */
+  --color-text-secondary: #3D5A52;  /* verde oscuro medio */
+  --color-text-muted:     #5F7A73;  /* teal-gray para subtextos */
+  --color-text-subtle:    #8FA39D;  /* labels uppercase */
+  --color-text-label:     #8FA39D;  /* alias semántico */
 
   /* === BORDES Y FOCO === */
-  --color-border:     #64748B;  /* neutral-500, NO neutral-400 (WCAG 1.4.11) */
-  --color-focus-ring: #2563EB;  /* ratio 5.17 / blanco (≥ 3:1 requerido) */
+  --color-border:      #EDE4D8;  /* warm border para cards y tablas */
+  --color-border-warm: #E8DFD3;  /* variante ligeramente más oscura */
+  --color-focus-ring:  #0E5D52;  /* teal profundo para foco */
 
   /* === ESPACIADO (escala de 4px) === */
   --spacing-0:  0;
@@ -90,15 +115,19 @@
   --radius-sm:   0.25rem;  /* 4px */
   --radius-md:   0.5rem;   /* 8px */
   --radius-lg:   0.75rem;  /* 12px */
+  --radius-xl:   1rem;     /* 16px */
   --radius-full: 9999px;
 
   /* === SOMBRAS === */
   --shadow-sm:  0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md:  0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg:  0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-md:  0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --shadow-lg:  0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.04);
 
   /* === TRANSICIONES === */
   --transition-fast:   150ms ease;
   --transition-normal: 250ms ease;
   --transition-slow:   350ms ease;
+
+  /* === SIDEBAR DIMENSIONS === */
+  --sidebar-width: 260px;
 }

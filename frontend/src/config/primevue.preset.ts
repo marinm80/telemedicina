@@ -1,74 +1,60 @@
 /**
  * ====================================================================
- * Preset de PrimeVue — Plataforma de Telemedicina
+ * Preset de PrimeVue — Plataforma de Telemedicina "Salvia"
  * AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
  * ====================================================================
  *
- * QUÉ FIJA ESTE ARCHIVO
- * Un único lugar para mapear los tokens de diseño (tokens.css) al sistema
- * de temas de PrimeVue 4 (Aura). Los componentes PrimeVue consumen el
+ * Mapeo de la paleta Salvia (dark teal / sage / warm cream) al sistema
+ * de temas PrimeVue 4 (Aura). Los componentes PrimeVue consumen el
  * preset; los componentes propios consumen var(--color-*) de tokens.css.
- *
- * REGLA: cambiar de preset (Aura → Lara) cuesta cambiar ESTE archivo.
- * Si cuesta más, algo se acopló mal.
- *
- * ALTERNATIVA DESCARTADA
- * Dejar Aura sin sobrescribir. Produce una paleta desalineada con los
- * tokens propios: dos fuentes de verdad para los mismos colores.
- *
- * NOTA: los valores de primary-200 a primary-400 y primary-800/950 no
- * fueron definidos explícitamente por el humano. Se completan con la
- * misma escala Tailwind CSS blue de donde salen los demás stops, para
- * que PrimeVue tenga la escala completa. Si estos valores necesitan
- * cambiar, se cambian ACÁ — no en cuarenta componentes.
  */
 import { definePreset } from '@primevue/themes';
 import Aura from '@primevue/themes/aura';
 
-/** Escala completa de superficie (Tailwind slate) */
+/** Escala de superficie Salvia (warm neutrals en lugar de slate) */
 const SURFACE = {
   0:   '#FFFFFF',
-  50:  '#F8FAFC',
-  100: '#F1F5F9',
-  200: '#E2E8F0',
-  300: '#CBD5E1',
-  400: '#94A3B8',
-  500: '#64748B',
-  600: '#475569',
-  700: '#334155',
-  800: '#1E293B',
-  900: '#0F172A',
-  950: '#020617',
+  50:  '#FAF9F5',
+  100: '#F4F1EA',
+  200: '#EDE4D8',
+  300: '#E8DFD3',
+  400: '#C4B9AB',
+  500: '#8FA39D',
+  600: '#5F7A73',
+  700: '#3D5A52',
+  800: '#17302B',
+  900: '#0E2420',
+  950: '#091815',
 } as const;
 
 export const telemedicinaPreset = definePreset(Aura, {
   semantic: {
     primary: {
-      50:  '#EFF6FF',
-      100: '#DBEAFE',
-      200: '#BFDBFE',   // Completado: escala Tailwind blue
-      300: '#93C5FD',   // Completado: escala Tailwind blue
-      400: '#60A5FA',   // Completado: escala Tailwind blue
-      500: '#3B82F6',
-      600: '#2563EB',
-      700: '#1D4ED8',
-      800: '#1E40AF',   // Completado: escala Tailwind blue
-      900: '#1E3A8A',
-      950: '#172554',   // Completado: escala Tailwind blue
+      50:  '#E8F5F2',
+      100: '#C8E6DE',
+      200: '#A0D4C5',
+      300: '#73BFAA',
+      400: '#4FA997',
+      500: '#2E9E6B',
+      600: '#0E5D52',
+      700: '#0B4D44',
+      800: '#093E37',
+      900: '#17302B',
+      950: '#091815',
     },
     colorScheme: {
       light: {
         primary: {
-          color: '{primary.700}',
+          color: '{primary.600}',
           inverseColor: '#FFFFFF',
-          hoverColor: '{primary.600}',
+          hoverColor: '{primary.700}',
           activeColor: '{primary.900}',
         },
         highlight: {
           background: '{primary.50}',
           focusBackground: '{primary.100}',
-          color: '{primary.700}',
-          focusColor: '{primary.800}',
+          color: '{primary.600}',
+          focusColor: '{primary.700}',
         },
         surface: SURFACE,
       },

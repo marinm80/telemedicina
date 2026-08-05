@@ -11,17 +11,36 @@
 La estructura de componentes está dividida de forma modular (Feature-First) para evitar el acoplamiento:
 
 ```
-AppLayout (Cintillo de Demo + Sidebar + Footer de Créditos)
+AppLayout (DemoBanner + AppSidebar + AppFooter)
+ ├── components/
+ │    ├── app/                         # Componentes de estructura global
+ │    │    ├── AppSidebar.vue          (★ Sidebar 260px sticky · Nav por rol · Role switcher admin)
+ │    │    └── DashboardHeader.vue     (★ Eyebrow + Título + Status pill + Action btn)
+ │    ├── dashboard/                   # Componentes reutilizables del dashboard
+ │    │    ├── StatCard.vue            (★ KPI card: icono + valor + trend)
+ │    │    ├── DataTable.vue           (★ Tabla ligera: filtros pill + slots #cell-{key})
+ │    │    ├── BarChart.vue            (★ Barras CSS puro — sin Chart.js)
+ │    │    ├── AssistantWidget.vue     (★ Card oscuro "Asistente Salvia" + acciones)
+ │    │    ├── AlertCard.vue           (★ Alerta urgente warning/critical con pulso)
+ │    │    └── ActivityFeed.vue        (★ Timeline vertical de actividad reciente)
+ │    ├── DemoBanner.vue               (★ Banner entorno demo/dev)
+ │    └── AppFooter.vue                (★ Footer © Salvia)
+ │
  ├── Pages/
  │    ├── Auth/
  │    │    ├── Login.vue
  │    │    └── Register.vue
+ │    ├── Dashboard/                    # Dashboards por rol (★ Reescritos completos)
+ │    │    ├── AdminDashboard.vue       (Verificaciones + KPIs + chart + widgets)
+ │    │    ├── DoctorDashboard.vue      (Agenda del día + notas + chart + tareas)
+ │    │    ├── PatientDashboard.vue     (Mis citas + recetas + chart + tratamiento)
+ │    │    └── AgentDashboard.vue       (Citas pendientes + acciones rápidas)
  │    ├── Appointments/
- │    │    ├── BookingWizard.vue (Reservas del Paciente / Conversión de Zona Horaria)
- │    │    └── AgendaManager.vue (Configuración de Agenda del Médico)
+ │    │    ├── BookingWizard.vue        (Reservas del Paciente / Conversión de Zona Horaria)
+ │    │    └── AgendaManager.vue        (Configuración de Agenda del Médico)
  │    └── Clinical/
- │         ├── Directory.vue (Directorio de Especialistas)
- │         └── ConsultationRoom.vue (Pantalla Crítica del Médico)
+ │         ├── Directory.vue            (Directorio de Especialistas)
+ │         └── ConsultationRoom.vue     (Pantalla Crítica del Médico)
  │              ├── PatientClinicalFile.vue (Panel Izquierdo - Longitudinal)
  │              │    ├── AllergyList.vue
  │              │    ├── ConditionList.vue
@@ -32,11 +51,13 @@ AppLayout (Cintillo de Demo + Sidebar + Footer de Créditos)
  │                   └── SOAPNoteEditor.vue (Formulario de Notas SOAP)
  │                        ├── AmendmentList.vue (Histórico de enmiendas amarillas)
  │                        └── VerificationStatus.vue (Estampado del Hash SHA-256 + QR)
- └── UI/
-      ├── SpinnerLoader.vue (Estado: Cargando)
-      ├── ErrorFallback.vue (Estado: Error con botón de reintento)
-      └── EmptyState.vue (Estado: Vacío)
+ │
+ └── layouts/
+      └── AppLayout.vue                (★ Integra Sidebar + provide activeViewRole)
 ```
+
+> **★** = Componente creado o reescrito en el sprint Salvia (2026-08-05).
+> Ver documentación detallada en [`docs/UI_COMPONENTS.md`](./UI_COMPONENTS.md).
 
 ---
 
