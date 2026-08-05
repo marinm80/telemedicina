@@ -21,7 +21,9 @@ final class AdminScheduleController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $schedules = DB::table('schedules')
+        $db = DB::connection('pgsql_admin');
+
+        $schedules = $db->table('schedules')
             ->join('doctor_profiles', 'schedules.doctor_profile_id', '=', 'doctor_profiles.id')
             ->join('users', 'doctor_profiles.user_id', '=', 'users.id')
             ->whereNull('schedules.deleted_at')

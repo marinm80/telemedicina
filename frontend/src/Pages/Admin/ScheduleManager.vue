@@ -63,23 +63,31 @@ async function fetchSchedules() {
 }
 
 async function fetchDoctors() {
-  try {
-    const res = await fetch('/api/admin/schedules', {
-      credentials: 'same-origin',
-      headers: { 'Accept': 'application/json' },
-    });
-    // We'll get doctor list from the shared Inertia props instead
-  } catch (e) {
-    // silent
-  }
+  // noop — doctors loaded from Inertia or schedule groups
 }
 
 onMounted(async () => {
   await fetchSchedules();
+
   // Get doctors from Inertia shared props
-  const pageProps = (window as any).__page?.props;
-  if (pageProps?.booking?.doctors) {
-    allDoctors.value = pageProps.booking.doctors;
+  try {
+    const { usePage } = await import('@inertiajs/vue3');
+    const page = usePage();
+    const booking = (page.props as any)?.booking;
+    if (booking?.doctors?.length) {
+      allDoctors.value = booking.doctors;
+      return;
+    }
+  } catch (e) {
+    // fallback below
+  }
+
+  // Fallback: extract unique doctors from the schedule groups we already loaded
+  if (doctorGroups.value.length > 0 && allDoctors.value.length === 0) {
+    allDoctors.value = doctorGroups.value.map((g: any) => ({
+      doctor_profile_id: g.doctor_profile_id,
+      full_name: g.doctor_name,
+    }));
   }
 });
 
