@@ -5,57 +5,81 @@
   ====================================================================
 -->
 <script setup lang="ts">
-import { ref, computed, inject, onMounted, onUnmounted } from 'vue';
-import { i18nKey } from '@/i18n/plugin';
-import { useAppState } from '@/composables/useAppState';
+import { ref, computed } from 'vue';
+import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Link } from '@inertiajs/vue3';
-import SpinnerLoader from '@/components/ui/SpinnerLoader.vue';
-import ErrorFallback from '@/components/ui/ErrorFallback.vue';
-import EmptyState from '@/components/ui/EmptyState.vue';
-import { mockDoctors, SPECIALTIES, getInitials, getAvatarColor } from '@/lib/mockData';
-import type { DoctorProfile } from '@/lib/mockData';
+import { getInitials, getAvatarColor } from '@/lib/mockData';
 
-const t = inject(i18nKey)!;
+interface Doctor {
+  user_id: string;
+  doctor_profile_id: string;
+  name: string;
+  last_name: string;
+  timezone: string;
+  consultation_fee: number;
+  description: string | null;
+  years_experience: number | null;
+  university: string | null;
+  specialties: string[];
+}
 
-const fetcher = async (signal: AbortSignal): Promise<DoctorProfile[]> => {
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  signal.throwIfAborted();
-  return [...mockDoctors];
-};
+interface Specialty {
+  id: string;
+  name: string;
+  description: string | null;
+}
 
-const { items, estado, error, estaVacio, cargar } = useAppState<DoctorProfile>(fetcher);
+interface Props {
+  doctors: {
+    data: Doctor[];
+    current_page: number;
+    last_page: number;
+  };
+  specialties: Specialty[];
+  filters: {
+    specialty_id?: string;
+    search?: string;
+  };
+}
 
-const searchQuery = ref('');
-const selectedSpecialty = ref('');
+const props = defineProps<Props>();
 
-const controller = new AbortController();
+const searchQuery = ref(props.filters?.search || '');
+const selectedSpecialtyId = ref(props.filters?.specialty_id || '');
 
-onMounted(() => {
-  cargar(controller.signal);
-});
-
-onUnmounted(() => {
-  controller.abort();
-});
+const doctorList = computed(() => props.doctors?.data || []);
 
 const filteredDoctors = computed(() => {
-  return items.value.filter((doctor) => {
-    const matchesSearch = doctor.name.toLowerCase().includes(searchQuery.value.toLowerCase());
-    const matchesSpecialty = selectedSpecialty.value
-      ? doctor.specialty === selectedSpecialty.value
-      : true;
-    return matchesSearch && matchesSpecialty;
+  return doctorList.value.filter((doctor) => {
+    const fullName = `${doctor.name} ${doctor.last_name}`.toLowerCase();
+    const matchesSearch = fullName.includes(searchQuery.value.toLowerCase());
+    return matchesSearch;
   });
 });
 
-function selectSpecialty(specialty: string) {
-  selectedSpecialty.value = selectedSpecialty.value === specialty ? '' : specialty;
+function selectSpecialty(specialtyId: string) {
+  selectedSpecialtyId.value = specialtyId;
+  router.get('/directory', {
+    specialty_id: specialtyId || undefined,
+    search: searchQuery.value || undefined,
+  }, { preserveState: true, preserveScroll: true });
+}
+
+function doSearch() {
+  router.get('/directory', {
+    specialty_id: selectedSpecialtyId.value || undefined,
+    search: searchQuery.value || undefined,
+  }, { preserveState: true, preserveScroll: true });
 }
 
 function clearFilters() {
   searchQuery.value = '';
-  selectedSpecialty.value = '';
+  selectedSpecialtyId.value = '';
+  router.get('/directory');
+}
+
+function doctorDisplayName(doc: Doctor): string {
+  return `${doc.name} ${doc.last_name}`.trim();
 }
 </script>
 
@@ -71,6 +95,7 @@ function clearFilters() {
           type="text"
           class="directory__search-input"
           placeholder="Buscar por nombre…"
+          @keyup.enter="doSearch"
         />
       </div>
     </header>
@@ -78,96 +103,64 @@ function clearFilters() {
     <div class="directory__filters">
       <button
         type="button"
-        :class="['directory__chip', { 'directory__chip--active': selectedSpecialty === '' }]"
+        :class="['directory__chip', { 'directory__chip--active': selectedSpecialtyId === '' }]"
         @click="selectSpecialty('')"
       >
         Todas
       </button>
       <button
-        v-for="sp in SPECIALTIES"
-        :key="sp"
+        v-for="sp in specialties"
+        :key="sp.id"
         type="button"
-        :class="['directory__chip', { 'directory__chip--active': selectedSpecialty === sp }]"
-        @click="selectSpecialty(sp)"
+        :class="['directory__chip', { 'directory__chip--active': selectedSpecialtyId === sp.id }]"
+        @click="selectSpecialty(sp.id)"
       >
-        {{ sp }}
+        {{ sp.name }}
       </button>
     </div>
 
-    <!-- Estado: cargando -->
-    <SpinnerLoader v-if="estado === 'cargando'" variant="card" :lines="6" />
-
-    <!-- Estado: error -->
-    <ErrorFallback
-      v-else-if="estado === 'error'"
-      :message="error ?? t('directory.error')"
-      :on-retry="() => cargar()"
-    />
-
-    <!-- Estado: vacío (sin resultados tras filtrar) -->
-    <EmptyState
-      v-else-if="estado === 'listo' && filteredDoctors.length === 0"
-      :message="t('directory.empty')"
-      :action-label="t('directory.empty_action')"
-      :on-action="clearFilters"
-    />
+    <!-- Estado: vacío -->
+    <div v-if="filteredDoctors.length === 0" class="directory__empty">
+      <i class="pi pi-search" style="font-size: 3rem; color: var(--color-text-muted, #9CA3AF); margin-bottom: 1rem;" />
+      <p style="color: var(--color-text-muted, #6B7280); font-size: 1.1rem;">No se encontraron médicos con los filtros seleccionados.</p>
+      <button type="button" class="directory__chip directory__chip--active" @click="clearFilters" style="margin-top: 1rem;">
+        Limpiar filtros
+      </button>
+    </div>
 
     <!-- Estado: listo -->
-    <div v-else-if="estado === 'listo'" class="directory__grid">
-      <div v-for="doctor in filteredDoctors" :key="doctor.id" class="card">
+    <div v-else class="directory__grid">
+      <div v-for="doctor in filteredDoctors" :key="doctor.doctor_profile_id" class="card">
         <div class="card__header">
           <div
             class="card__avatar"
-            :style="{ backgroundColor: getAvatarColor(doctor.name) }"
+            :style="{ backgroundColor: getAvatarColor(doctorDisplayName(doctor)) }"
           >
-            {{ getInitials(doctor.name) }}
+            {{ getInitials(doctorDisplayName(doctor)) }}
           </div>
           <div class="card__info">
-            <h2 class="card__name">{{ doctor.name }}</h2>
-            <span class="card__specialty">{{ doctor.specialty }}</span>
+            <h2 class="card__name">{{ doctorDisplayName(doctor) }}</h2>
+            <span class="card__specialty">{{ doctor.specialties?.join(', ') || 'General' }}</span>
           </div>
         </div>
 
         <div class="card__body">
-          <div class="card__rating">
-            <div class="card__stars">
-              <i
-                v-for="i in 5"
-                :key="i"
-                :class="[
-                  'pi',
-                  i <= Math.round(doctor.rating)
-                    ? 'pi-star-fill card__star--filled'
-                    : 'pi-star card__star--empty',
-                ]"
-                aria-hidden="true"
-              />
-            </div>
-            <span class="card__rating-text">
-              {{ doctor.rating }} ({{ doctor.reviews_count }} reseñas)
-            </span>
+          <div v-if="doctor.university" class="card__detail">
+            <i class="pi pi-building" aria-hidden="true" />
+            <span>{{ doctor.university }}</span>
           </div>
-
-          <div class="card__availability">
-            <span
-              :class="[
-                'card__dot',
-                doctor.available_slots_today > 0 ? 'card__dot--available' : 'card__dot--unavailable',
-              ]"
-            />
-            <span class="card__avail-text">
-              <template v-if="doctor.available_slots_today > 0">
-                {{ doctor.available_slots_today }} turnos disponibles hoy
-              </template>
-              <template v-else>
-                Sin disponibilidad hoy
-              </template>
-            </span>
+          <div v-if="doctor.years_experience" class="card__detail">
+            <i class="pi pi-clock" aria-hidden="true" />
+            <span>{{ doctor.years_experience }} años de experiencia</span>
+          </div>
+          <div v-if="doctor.consultation_fee" class="card__detail">
+            <i class="pi pi-dollar" aria-hidden="true" />
+            <span>${{ doctor.consultation_fee.toFixed(2) }} por consulta</span>
           </div>
         </div>
 
         <div class="card__footer">
-          <Link :href="`/booking/${doctor.id}`" class="card__cta">
+          <Link :href="`/booking/${doctor.doctor_profile_id}`" class="card__cta">
             Ver Disponibilidad
           </Link>
         </div>
@@ -358,41 +351,28 @@ function clearFilters() {
   gap: var(--spacing-2);
 }
 
-.card__rating {
+.card__detail {
   display: flex;
   align-items: center;
   gap: var(--spacing-2);
-}
-
-.card__stars { display: flex; gap: 2px; }
-
-.card__star--filled { color: var(--color-warning-600); font-size: var(--text-sm); }
-.card__star--empty { color: var(--color-surface-200); font-size: var(--text-sm); }
-
-.card__rating-text {
-  font-size: var(--text-xs);
-  color: var(--color-text-subtle);
-}
-
-.card__availability {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-}
-
-.card__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
-}
-
-.card__dot--available { background-color: var(--color-success-700); }
-.card__dot--unavailable { background-color: var(--color-surface-200); }
-
-.card__avail-text {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   color: var(--color-text-muted);
+}
+
+.card__detail i {
+  font-size: var(--text-sm);
+  color: var(--color-primary-600);
+  width: 16px;
+  text-align: center;
+}
+
+.directory__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-8) var(--spacing-4);
+  text-align: center;
 }
 
 .card__footer {
