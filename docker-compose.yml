@@ -37,6 +37,7 @@ services:
       - DB_DATABASE=telemedicina
       - DB_USERNAME=postgres
       - DB_PASSWORD=postgres_password
+      - VITE_DEV_URL=http://localhost:5174
     ports:
       - "8000:8000"
     depends_on:
@@ -54,7 +55,7 @@ services:
       - ./frontend:/app
       - /app/node_modules   # volumen anónimo: evita pisar node_modules del contenedor con el del host
     ports:
-      - "5173:5173"
+      - "5174:5173" # Mapeado a 5174 para evitar colisión con Vite dev local en 5173
     environment:
       - VITE_USE_MOCKS=false
       - CI=true

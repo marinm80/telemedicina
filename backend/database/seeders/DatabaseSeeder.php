@@ -232,8 +232,11 @@ class DatabaseSeeder extends Seeder
                 ]);
             }
 
+            // 7. Datos de Demostración Extra
+            $this->call(DemoDataSeeder::class);
+
         } finally {
-            // 7. Limpiar contexto administrativo al finalizar la ejecución del seeder
+            // 8. Limpiar contexto administrativo al finalizar la ejecución del seeder
             DB::statement("SELECT set_config('app.current_user_role', '', false)");
             DB::statement("SELECT set_config('app.current_user_id', '', false)");
         }

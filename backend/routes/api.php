@@ -60,4 +60,11 @@ Route::middleware([SetPostgresSessionContext::class])->group(function () {
     Route::delete('/schedules/{id}', [\App\Http\Controllers\Api\ScheduleController::class, 'destroySchedule']);
     Route::post('/schedule-blocks', [\App\Http\Controllers\Api\ScheduleController::class, 'storeBlock']);
     Route::delete('/schedule-blocks/{id}', [\App\Http\Controllers\Api\ScheduleController::class, 'destroyBlock']);
+
+    // Admin schedule management
+    Route::middleware('role:admin')->prefix('admin')->group(function () {
+        Route::get('/schedules', [\App\Http\Controllers\Api\AdminScheduleController::class, 'index']);
+        Route::post('/schedules', [\App\Http\Controllers\Api\AdminScheduleController::class, 'store']);
+        Route::delete('/schedules/{id}', [\App\Http\Controllers\Api\AdminScheduleController::class, 'destroy']);
+    });
 });

@@ -1,7 +1,7 @@
 <!--
   ====================================================================
-  PreConsultation — Cuestionario pre-consulta de 8 secciones
-  AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
+  PreConsultation â€” Cuestionario pre-consulta de 8 secciones
+  AUTHOR: Rafael MarÃ­n Â· PORTFOLIO: https://rafaelmarin.dev
   ====================================================================
   RF-13 Cuestionario Pre-consulta
   Ruta: /appointments/:id/pre-consultation (autenticado, paciente)
@@ -18,14 +18,14 @@ const props = defineProps<{
   appointmentId: string;
 }>();
 
-// ── Wizard state ───────────────────────────────────────────────────────
+// â”€â”€ Wizard state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const currentSection = ref(1);
 const totalSections = 8;
 const isSubmitting = ref(false);
 const submitSuccess = ref(false);
 const submitError = ref('');
 
-// ── Form data (8 secciones) ────────────────────────────────────────────
+// â”€â”€ Form data (8 secciones) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const generalInfo = ref({
   full_name: '',
   birth_date: '',
@@ -56,7 +56,7 @@ const reproductiveData = ref<Record<string, unknown>>({});
 const warningSigns = ref<string[]>([]);
 const additionalDocs = ref<string[]>([]);
 
-// ── Input helpers for arrays ───────────────────────────────────────────
+// â”€â”€ Input helpers for arrays â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const newDisease = ref('');
 const newAllergy = ref('');
 const newHereditaryDisease = ref('');
@@ -75,21 +75,21 @@ function removeFromList(list: string[], index: number) {
   list.splice(index, 1);
 }
 
-// ── Sección info ───────────────────────────────────────────────────────
+// â”€â”€ SecciÃ³n info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const sections = [
   { num: 1, label: 'Datos Generales', icon: 'pi-user' },
-  { num: 2, label: 'Síntomas Actuales', icon: 'pi-heart' },
-  { num: 3, label: 'Historial Médico', icon: 'pi-file' },
+  { num: 2, label: 'SÃ­ntomas Actuales', icon: 'pi-heart' },
+  { num: 3, label: 'Historial MÃ©dico', icon: 'pi-file' },
   { num: 4, label: 'Historial Familiar', icon: 'pi-users' },
   { num: 5, label: 'Estilo de Vida', icon: 'pi-sun' },
   { num: 6, label: 'Datos Reproductivos', icon: 'pi-shield' },
-  { num: 7, label: 'Señales de Alerta', icon: 'pi-exclamation-triangle' },
+  { num: 7, label: 'SeÃ±ales de Alerta', icon: 'pi-exclamation-triangle' },
   { num: 8, label: 'Documentos Adicionales', icon: 'pi-paperclip' },
 ];
 
 const progress = computed(() => Math.round((currentSection.value / totalSections) * 100));
 
-// ── Navigation ─────────────────────────────────────────────────────────
+// â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function nextSection() {
   if (currentSection.value < totalSections) currentSection.value++;
 }
@@ -102,7 +102,7 @@ function goToSection(num: number) {
   currentSection.value = num;
 }
 
-// ── Submit ─────────────────────────────────────────────────────────────
+// â”€â”€ Submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function submitQuestionnaire() {
   isSubmitting.value = true;
   submitError.value = '';
@@ -139,12 +139,12 @@ async function submitQuestionnaire() {
       submitSuccess.value = true;
     } else if (res.status === 422) {
       const json = await res.json();
-      submitError.value = json.message ?? 'Error de validación.';
+      submitError.value = json.message ?? 'Error de validaciÃ³n.';
     } else {
       submitError.value = 'Error al enviar el cuestionario.';
     }
   } catch {
-    submitError.value = 'Error de red. Verifica tu conexión.';
+    submitError.value = 'Error de red. Verifica tu conexiÃ³n.';
   } finally {
     isSubmitting.value = false;
   }
@@ -162,8 +162,8 @@ async function submitQuestionnaire() {
       <!-- Success state -->
       <div v-if="submitSuccess" class="precon__success" role="status">
         <i class="pi pi-check-circle precon__success-icon" aria-hidden="true" />
-        <h2>¡Cuestionario Enviado!</h2>
-        <p>Tu médico revisará esta información antes de la consulta.</p>
+        <h2>Â¡Cuestionario Enviado!</h2>
+        <p>Tu mÃ©dico revisarÃ¡ esta informaciÃ³n antes de la consulta.</p>
       </div>
 
       <template v-else>
@@ -171,7 +171,7 @@ async function submitQuestionnaire() {
         <div class="precon__progress">
           <div class="precon__progress-bar" :style="{ width: progress + '%' }" />
         </div>
-        <p class="precon__progress-label">Sección {{ currentSection }} de {{ totalSections }}</p>
+        <p class="precon__progress-label">SecciÃ³n {{ currentSection }} de {{ totalSections }}</p>
 
         <!-- Section nav pills -->
         <div class="precon__nav">
@@ -203,20 +203,20 @@ async function submitQuestionnaire() {
             <input id="birth_date" v-model="generalInfo.birth_date" type="date" class="precon__input" required />
           </div>
           <div class="precon__field">
-            <label for="phone">Teléfono</label>
+            <label for="phone">TelÃ©fono</label>
             <input id="phone" v-model="generalInfo.phone" type="tel" class="precon__input" />
           </div>
         </div>
 
-        <!-- Section 2: Síntomas Actuales -->
+        <!-- Section 2: SÃ­ntomas Actuales -->
         <div v-show="currentSection === 2" class="precon__section">
-          <h2 class="precon__section-title">Síntomas Actuales</h2>
+          <h2 class="precon__section-title">SÃ­ntomas Actuales</h2>
           <div class="precon__field">
-            <label for="symptoms">Describa sus síntomas</label>
+            <label for="symptoms">Describa sus sÃ­ntomas</label>
             <textarea id="symptoms" v-model="currentSymptoms.symptoms" class="precon__textarea" rows="4" />
           </div>
           <div class="precon__field">
-            <label for="onset_date">¿Desde cuándo los presenta?</label>
+            <label for="onset_date">Â¿Desde cuÃ¡ndo los presenta?</label>
             <input id="onset_date" v-model="currentSymptoms.onset_date" type="date" class="precon__input" />
           </div>
           <div class="precon__field">
@@ -233,11 +233,11 @@ async function submitQuestionnaire() {
           </div>
         </div>
 
-        <!-- Section 3: Historial Médico -->
+        <!-- Section 3: Historial MÃ©dico -->
         <div v-show="currentSection === 3" class="precon__section">
-          <h2 class="precon__section-title">Historial Médico</h2>
+          <h2 class="precon__section-title">Historial MÃ©dico</h2>
           <div class="precon__field">
-            <label>Enfermedades Crónicas</label>
+            <label>Enfermedades CrÃ³nicas</label>
             <div class="precon__tag-input">
               <input v-model="newDisease" type="text" class="precon__input" placeholder="Ej: Diabetes"
                 @keydown.enter.prevent="addToList(medicalHistory.chronic_diseases, newDisease, () => newDisease = '')" />
@@ -248,7 +248,7 @@ async function submitQuestionnaire() {
             <div class="precon__tags">
               <span v-for="(d, i) in medicalHistory.chronic_diseases" :key="d" class="precon__tag">
                 {{ d }}
-                <button type="button" class="precon__tag-remove" @click="removeFromList(medicalHistory.chronic_diseases, i)">×</button>
+                <button type="button" class="precon__tag-remove" @click="removeFromList(medicalHistory.chronic_diseases, i)">Ã—</button>
               </span>
             </div>
           </div>
@@ -264,7 +264,7 @@ async function submitQuestionnaire() {
             <div class="precon__tags">
               <span v-for="(a, i) in medicalHistory.allergies" :key="a" class="precon__tag">
                 {{ a }}
-                <button type="button" class="precon__tag-remove" @click="removeFromList(medicalHistory.allergies, i)">×</button>
+                <button type="button" class="precon__tag-remove" @click="removeFromList(medicalHistory.allergies, i)">Ã—</button>
               </span>
             </div>
           </div>
@@ -276,7 +276,7 @@ async function submitQuestionnaire() {
           <div class="precon__field">
             <label>Enfermedades Hereditarias</label>
             <div class="precon__tag-input">
-              <input v-model="newHereditaryDisease" type="text" class="precon__input" placeholder="Ej: Hipertensión"
+              <input v-model="newHereditaryDisease" type="text" class="precon__input" placeholder="Ej: HipertensiÃ³n"
                 @keydown.enter.prevent="addToList(familyHistory.hereditary_diseases, newHereditaryDisease, () => newHereditaryDisease = '')" />
               <button type="button" class="precon__add-btn" @click="addToList(familyHistory.hereditary_diseases, newHereditaryDisease, () => newHereditaryDisease = '')">
                 <i class="pi pi-plus" aria-hidden="true" />
@@ -285,7 +285,7 @@ async function submitQuestionnaire() {
             <div class="precon__tags">
               <span v-for="(d, i) in familyHistory.hereditary_diseases" :key="d" class="precon__tag">
                 {{ d }}
-                <button type="button" class="precon__tag-remove" @click="removeFromList(familyHistory.hereditary_diseases, i)">×</button>
+                <button type="button" class="precon__tag-remove" @click="removeFromList(familyHistory.hereditary_diseases, i)">Ã—</button>
               </span>
             </div>
           </div>
@@ -295,7 +295,7 @@ async function submitQuestionnaire() {
         <div v-show="currentSection === 5" class="precon__section">
           <h2 class="precon__section-title">Estilo de Vida</h2>
           <div class="precon__field">
-            <label for="smoking">¿Fuma?</label>
+            <label for="smoking">Â¿Fuma?</label>
             <select id="smoking" v-model="lifestyle.smoking" class="precon__select">
               <option value="no">No</option>
               <option value="ocasional">Ocasionalmente</option>
@@ -304,7 +304,7 @@ async function submitQuestionnaire() {
             </select>
           </div>
           <div class="precon__field">
-            <label for="alcohol">¿Consume alcohol?</label>
+            <label for="alcohol">Â¿Consume alcohol?</label>
             <select id="alcohol" v-model="lifestyle.alcohol" class="precon__select">
               <option value="no">No</option>
               <option value="ocasional">Ocasionalmente</option>
@@ -324,10 +324,10 @@ async function submitQuestionnaire() {
           </div>
         </div>
 
-        <!-- Section 7: Señales de Alerta -->
+        <!-- Section 7: SeÃ±ales de Alerta -->
         <div v-show="currentSection === 7" class="precon__section">
-          <h2 class="precon__section-title">Señales de Alerta</h2>
-          <p class="precon__hint">Indique si ha experimentado alguna de estas señales recientemente.</p>
+          <h2 class="precon__section-title">SeÃ±ales de Alerta</h2>
+          <p class="precon__hint">Indique si ha experimentado alguna de estas seÃ±ales recientemente.</p>
           <div class="precon__field">
             <div class="precon__tag-input">
               <input v-model="newWarningSign" type="text" class="precon__input" placeholder="Ej: Dolor de pecho"
@@ -339,7 +339,7 @@ async function submitQuestionnaire() {
             <div class="precon__tags">
               <span v-for="(s, i) in warningSigns" :key="s" class="precon__tag precon__tag--warning">
                 {{ s }}
-                <button type="button" class="precon__tag-remove" @click="removeFromList(warningSigns, i)">×</button>
+                <button type="button" class="precon__tag-remove" @click="removeFromList(warningSigns, i)">Ã—</button>
               </span>
             </div>
           </div>
@@ -364,7 +364,7 @@ async function submitQuestionnaire() {
           <div class="precon__tags">
             <span v-for="(doc, i) in additionalDocs" :key="doc" class="precon__tag">
               {{ doc }}
-              <button type="button" class="precon__tag-remove" @click="removeFromList(additionalDocs, i)">×</button>
+              <button type="button" class="precon__tag-remove" @click="removeFromList(additionalDocs, i)">Ã—</button>
             </span>
           </div>
         </div>

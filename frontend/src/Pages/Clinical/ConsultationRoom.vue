@@ -26,7 +26,7 @@ const isEmpty = ref(false);
 // Patient Clinical File
 const patient = reactive({
   id: 'PAC-1092',
-  name: 'María Fernández',
+  name: 'MarÃ­a FernÃ¡ndez',
   age: 42,
   consultationNumber: 'CON-5582',
   allergies: [
@@ -34,17 +34,17 @@ const patient = reactive({
     { id: '2', name: 'Polvo', severity: 'baja' as const }
   ],
   conditions: [
-    { id: '1', name: 'Hipertensión Arterial', status: 'activa' as const },
+    { id: '1', name: 'HipertensiÃ³n Arterial', status: 'activa' as const },
     { id: '2', name: 'Asma leve', status: 'activa' as const },
     { id: '3', name: 'Apendicitis', status: 'resuelta' as const }
   ],
   medications: [
-    { id: '1', name: 'Losartán', dosage: '50mg c/12h' },
+    { id: '1', name: 'LosartÃ¡n', dosage: '50mg c/12h' },
     { id: '2', name: 'Salbutamol', dosage: '2 puffs PRN' }
   ],
   history: [
-    { id: '1', date: '10/05/2026', doctor: 'Dr. R. Marín', summary: 'Control de hipertensión. Ajuste de dosis.' },
-    { id: '2', date: '15/02/2026', doctor: 'Dra. S. Gómez', summary: 'Consulta por cuadro respiratorio agudo.' }
+    { id: '1', date: '10/05/2026', doctor: 'Dr. R. MarÃ­n', summary: 'Control de hipertensiÃ³n. Ajuste de dosis.' },
+    { id: '2', date: '15/02/2026', doctor: 'Dra. S. GÃ³mez', summary: 'Consulta por cuadro respiratorio agudo.' }
   ]
 });
 
@@ -197,7 +197,7 @@ const saveDraft = async () => {
       const now = new Date();
       lastSaved.value = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
     } else if (response.status === 403) {
-      signatureError.value = '403 Forbidden: La nota ya está firmada.';
+      signatureError.value = '403 Forbidden: La nota ya estÃ¡ firmada.';
     } else {
       signatureError.value = 'Error al guardar borrador.';
     }
@@ -212,7 +212,7 @@ const saveDraft = async () => {
 // Sign SOAP note
 const signNote = async () => {
   if (!hasConsent.value || !isFormValid.value) return;
-  if (!confirm('¿Está seguro de que desea firmar esta nota? Esta acción es irreversible.')) return;
+  if (!confirm('Â¿EstÃ¡ seguro de que desea firmar esta nota? Esta acciÃ³n es irreversible.')) return;
 
   isSigningNote.value = true;
   signatureError.value = '';
@@ -230,10 +230,10 @@ const signNote = async () => {
       const data = await response.json();
       signedNote.value = data;
     } else {
-      signatureError.value = 'Error al firmar nota clínica.';
+      signatureError.value = 'Error al firmar nota clÃ­nica.';
     }
   } catch (error) {
-    signatureError.value = 'Error al firmar nota clínica.';
+    signatureError.value = 'Error al firmar nota clÃ­nica.';
   } finally {
     isSigningNote.value = false;
   }
@@ -267,7 +267,7 @@ const addAmendment = async () => {
       amendmentReason.value = '';
       amendmentContent.value = '';
     } else {
-      alert('Error al añadir la enmienda.');
+      alert('Error al aÃ±adir la enmienda.');
     }
   } catch (error) {
     console.error('Error adding amendment:', error);
@@ -310,7 +310,7 @@ const initConsultation = async () => {
     ]);
   } catch (error) {
     hasError.value = true;
-    errorMessage.value = 'Error al cargar la consulta médica.';
+    errorMessage.value = 'Error al cargar la consulta mÃ©dica.';
   } finally {
     isLoading.value = false;
   }
@@ -356,7 +356,7 @@ onUnmounted(() => {
             <div class="patient-header__info">
               <h2 class="patient-header__name">{{ patient.name }}</h2>
               <p class="patient-header__details">
-                {{ patient.age }} años • ID: {{ patient.id }} • Consulta #{{ patient.consultationNumber }}
+                {{ patient.age }} aÃ±os â€¢ ID: {{ patient.id }} â€¢ Consulta #{{ patient.consultationNumber }}
               </p>
             </div>
           </header>
@@ -436,7 +436,7 @@ onUnmounted(() => {
           <!-- TOP: Chat Window -->
           <section class="chat" :class="{'chat--full-height': props.userRole === 'patient' && !signedNote}">
             <header class="chat__header">
-              <h3><i class="pi pi-comments"></i> Chat de Sesión</h3>
+              <h3><i class="pi pi-comments"></i> Chat de SesiÃ³n</h3>
               <div class="chat-header__status">
                 <span v-if="connectionStatus === 'connecting'" class="status-indicator status-indicator--connecting">
                   <i class="pi pi-spin pi-spinner"></i> Conectando...
@@ -445,7 +445,7 @@ onUnmounted(() => {
                   <i class="pi pi-check-circle"></i> Conectado
                 </span>
                 <span v-else class="status-indicator status-indicator--error">
-                  <i class="pi pi-exclamation-circle"></i> Error de Conexión
+                  <i class="pi pi-exclamation-circle"></i> Error de ConexiÃ³n
                 </span>
               </div>
             </header>
@@ -458,7 +458,7 @@ onUnmounted(() => {
               >
                 <div class="chat__message-header">
                   <span class="chat__message-sender">
-                    {{ msg.sender_id === currentUserId ? 'Tú' : (props.userRole === 'doctor' ? 'Paciente' : 'Médico') }}
+                    {{ msg.sender_id === currentUserId ? 'TÃº' : (props.userRole === 'doctor' ? 'Paciente' : 'MÃ©dico') }}
                   </span>
                   <span class="chat__message-time">
                     {{ new Date(msg.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
@@ -503,13 +503,13 @@ onUnmounted(() => {
               </div>
 
               <div class="soap__field">
-                <label for="soap-s">S - Subjetivo (Síntomas)</label>
+                <label for="soap-s">S - Subjetivo (SÃ­ntomas)</label>
                 <textarea 
                   id="soap-s" 
                   v-model="soapData.symptoms" 
                   :disabled="!!signedNote || props.userRole !== 'doctor'"
                   :class="{'soap__textarea--signed': !!signedNote}"
-                  placeholder="Motivo de consulta, síntomas referidos por el paciente..."
+                  placeholder="Motivo de consulta, sÃ­ntomas referidos por el paciente..."
                 ></textarea>
               </div>
               <div class="soap__field">
@@ -519,17 +519,17 @@ onUnmounted(() => {
                   v-model="soapData.objective" 
                   :disabled="!!signedNote || props.userRole !== 'doctor'"
                   :class="{'soap__textarea--signed': !!signedNote}"
-                  placeholder="Signos vitales, hallazgos de exploración física..."
+                  placeholder="Signos vitales, hallazgos de exploraciÃ³n fÃ­sica..."
                 ></textarea>
               </div>
               <div class="soap__field">
-                <label for="soap-a">A - Análisis</label>
+                <label for="soap-a">A - AnÃ¡lisis</label>
                 <textarea 
                   id="soap-a" 
                   v-model="soapData.analysis" 
                   :disabled="!!signedNote || props.userRole !== 'doctor'"
                   :class="{'soap__textarea--signed': !!signedNote}"
-                  placeholder="Diagnóstico presuntivo, evaluación clínica..."
+                  placeholder="DiagnÃ³stico presuntivo, evaluaciÃ³n clÃ­nica..."
                 ></textarea>
               </div>
               <div class="soap__field">
@@ -559,7 +559,7 @@ onUnmounted(() => {
                   :disabled="!hasConsent || !isFormValid || isSigningNote" 
                   @click="signNote"
                 >
-                  <i class="pi" :class="isSigningNote ? 'pi-spin pi-spinner' : 'pi-lock'"></i> FIRMAR NOTA CLÍNICA
+                  <i class="pi" :class="isSigningNote ? 'pi-spin pi-spinner' : 'pi-lock'"></i> FIRMAR NOTA CLÃNICA
                 </button>
               </div>
             </div>
@@ -570,8 +570,8 @@ onUnmounted(() => {
                 <i class="pi pi-shield"></i>
               </div>
               <div class="banner-content">
-                <strong>Nota Clínica Firmada Digitalmente</strong>
-                <p>Médico ID: {{ (signedNote as any).signed_by || 'Firmado' }} | Fecha: {{ signedNote.signed_at ? new Date(signedNote.signed_at).toLocaleString() : '' }}</p>
+                <strong>Nota ClÃ­nica Firmada Digitalmente</strong>
+                <p>MÃ©dico ID: {{ (signedNote as any).signed_by || 'Firmado' }} | Fecha: {{ signedNote.signed_at ? new Date(signedNote.signed_at).toLocaleString() : '' }}</p>
                 <p class="hash-text">SHA-256: {{ signedNote.content_hash }}</p>
               </div>
             </div>
@@ -581,7 +581,7 @@ onUnmounted(() => {
               <div class="amendments-list" v-if="amendments.length > 0">
                 <div v-for="amend in amendments" :key="amend.id" class="amendment-item">
                   <div class="amendment-item__header">
-                    <strong>Enmienda Clínica</strong>
+                    <strong>Enmienda ClÃ­nica</strong>
                     <span>{{ new Date(amend.created_at).toLocaleString() }}</span>
                   </div>
                   <p class="amendment-item__reason"><strong>Motivo:</strong> {{ amend.reason }}</p>
@@ -591,14 +591,14 @@ onUnmounted(() => {
 
               <!-- Add amendment (Doctor only) -->
               <div v-if="props.userRole === 'doctor'" class="amendment-section">
-                <h4>Añadir Enmienda Clínica</h4>
+                <h4>AÃ±adir Enmienda ClÃ­nica</h4>
                 <div class="soap__field">
                   <label for="amendment-reason">Motivo de la enmienda</label>
                   <input 
                     id="amendment-reason" 
                     v-model="amendmentReason" 
                     type="text" 
-                    placeholder="Ej. Corrección de dosis de medicamento..."
+                    placeholder="Ej. CorrecciÃ³n de dosis de medicamento..."
                   />
                 </div>
                 <div class="soap__field">

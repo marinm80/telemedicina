@@ -63,10 +63,7 @@ Route::middleware('auth')->group(function () {
         'description' => 'Aprueba o rechaza solicitudes de nuevos médicos en la plataforma.',
     ]))->name('admin.verificaciones');
 
-    Route::get('/admin/medicos', fn() => Inertia::render('ComingSoon', [
-        'title' => 'Gestión de Médicos',
-        'description' => 'Administra perfiles, especialidades y disponibilidad de los médicos.',
-    ]))->name('admin.medicos');
+    Route::get('/admin/medicos', fn() => Inertia::render('Admin/ScheduleManager'))->name('admin.medicos');
 
     Route::get('/admin/pacientes', fn() => Inertia::render('ComingSoon', [
         'title' => 'Gestión de Pacientes',
