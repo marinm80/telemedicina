@@ -66,7 +66,6 @@
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue';
-import { router } from '@inertiajs/vue3';
 
 interface Message {
   role: 'assistant' | 'user';
@@ -99,11 +98,8 @@ const scrollToBottom = async () => {
 };
 
 const navigate = (url: string) => {
-  router.visit(url, {
-    onStart: () => {
-      isOpen.value = false;
-    }
-  });
+  isOpen.value = false;
+  window.location.href = url;
 };
 
 const sendMessage = () => {
