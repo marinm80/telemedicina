@@ -40,6 +40,18 @@ const successMsg = ref('');
 const showForm = ref(false);
 const filterStatus = ref('all');
 
+// Edit modal
+const editModal = ref(false);
+const editDoc = ref<Doctor | null>(null);
+const editForm = ref({
+  status: 'approved',
+  consultation_fee: 0,
+  description: '',
+  years_experience: 0,
+  university: '',
+});
+const editSaving = ref(false);
+
 // Form state
 const form = ref({
   name: '',
@@ -149,12 +161,26 @@ async function createDoctor() {
   }
 }
 
-async function updateStatus(profileId: string, newStatus: string) {
-  const action = newStatus === 'approved' ? 'aprobar' : newStatus === 'rejected' ? 'rechazar' : 'cambiar estado de';
-  if (!confirm(`¿Deseas ${action} este médico?`)) return;
+function openEditModal(doc: Doctor) {
+  editDoc.value = doc;
+  editForm.value = {
+    status: doc.status,
+    consultation_fee: doc.consultation_fee,
+    description: doc.description || '',
+    years_experience: doc.years_experience || 0,
+    university: doc.university || '',
+  };
+  editModal.value = true;
+}
+
+async function saveEdit() {
+  if (!editDoc.value) return;
+  editSaving.value = true;
+  error.value = '';
 
   try {
-    const res = await fetch(`/api/admin/doctors/${profileId}/status`, {
+    // Update status
+    const res = await fetch(`/api/admin/doctors/${editDoc.value.profile_id}/status`, {
       method: 'PATCH',
       credentials: 'same-origin',
       headers: {
@@ -162,18 +188,22 @@ async function updateStatus(profileId: string, newStatus: string) {
         'Accept': 'application/json',
         'X-CSRF-TOKEN': getCsrfToken(),
       },
-      body: JSON.stringify({ status: newStatus }),
+      body: JSON.stringify({ status: editForm.value.status }),
     });
 
     if (res.ok) {
-      successMsg.value = `✅ Estado actualizado a "${newStatus}"`;
+      successMsg.value = '✅ Médico actualizado exitosamente';
+      editModal.value = false;
       await fetchDoctors();
-      setTimeout(() => { successMsg.value = ''; }, 3000);
+      setTimeout(() => { successMsg.value = ''; }, 4000);
     } else {
-      error.value = 'Error al actualizar estado';
+      const data = await res.json().catch(() => ({}));
+      error.value = data.message || 'Error al actualizar';
     }
   } catch (e: any) {
     error.value = e.message;
+  } finally {
+    editSaving.value = false;
   }
 }
 
@@ -384,33 +414,87 @@ function formatDate(dateStr: string) {
           </div>
 
           <div class="doctor-card__actions">
-            <button
-              v-if="doc.status !== 'approved'"
-              class="action-btn action-btn--approve"
-              @click="updateStatus(doc.profile_id, 'approved')"
-              title="Aprobar"
-            >
-              <i class="pi pi-check"></i> Aprobar
-            </button>
-            <button
-              v-if="doc.status !== 'rejected'"
-              class="action-btn action-btn--reject"
-              @click="updateStatus(doc.profile_id, 'rejected')"
-              title="Rechazar"
-            >
-              <i class="pi pi-times"></i> Rechazar
-            </button>
-            <button
-              v-if="doc.status !== 'pending'"
-              class="action-btn action-btn--pending"
-              @click="updateStatus(doc.profile_id, 'pending')"
-              title="Poner en pendiente"
-            >
-              <i class="pi pi-clock"></i> Pendiente
+            <button class="action-btn action-btn--edit" @click="openEditModal(doc)">
+              <i class="pi pi-pencil"></i> Editar Ficha
             </button>
           </div>
         </div>
       </div>
+      <!-- Edit Doctor Modal -->
+      <Teleport to="body">
+        <Transition name="fade">
+          <div v-if="editModal && editDoc" class="modal-overlay" @click.self="editModal = false">
+            <div class="modal-card">
+              <div class="modal-header">
+                <div class="modal-header__avatar" :style="{ backgroundColor: getAvatarColor(editDoc.name + ' ' + editDoc.last_name) }">
+                  {{ getInitials(editDoc.name + ' ' + editDoc.last_name) }}
+                </div>
+                <div>
+                  <h3 class="modal-title">{{ editDoc.name }} {{ editDoc.last_name }}</h3>
+                  <p class="modal-subtitle">{{ editDoc.email }}</p>
+                </div>
+                <button class="modal-close" @click="editModal = false">×</button>
+              </div>
+
+              <div class="modal-body">
+                <div class="modal-section">
+                  <h4>📋 Información</h4>
+                  <div class="info-grid">
+                    <div class="info-item"><span class="info-label">Licencia</span><span class="info-value">{{ editDoc.license_number }}</span></div>
+                    <div class="info-item"><span class="info-label">Especialidades</span><span class="info-value">{{ editDoc.specialties.join(', ') || '—' }}</span></div>
+                    <div class="info-item"><span class="info-label">Zona horaria</span><span class="info-value">{{ editDoc.timezone }}</span></div>
+                    <div class="info-item"><span class="info-label">Registrado</span><span class="info-value">{{ formatDate(editDoc.created_at) }}</span></div>
+                  </div>
+                </div>
+
+                <div class="modal-section">
+                  <h4>⚙️ Configuración</h4>
+                  <div class="edit-grid">
+                    <div class="form-group">
+                      <label class="form-label">Estado</label>
+                      <div class="status-toggle">
+                        <button
+                          v-for="opt in [
+                            { value: 'approved', label: '✅ Aprobado', cls: 'st--approved' },
+                            { value: 'pending', label: '⏳ Pendiente', cls: 'st--pending' },
+                            { value: 'rejected', label: '❌ Rechazado', cls: 'st--rejected' },
+                          ]"
+                          :key="opt.value"
+                          :class="['st-btn', opt.cls, { 'st-btn--active': editForm.status === opt.value }]"
+                          @click="editForm.status = opt.value"
+                        >{{ opt.label }}</button>
+                      </div>
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Universidad</label>
+                      <input v-model="editForm.university" class="form-input" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Años de experiencia</label>
+                      <input v-model.number="editForm.years_experience" type="number" min="0" class="form-input" />
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">Tarifa consulta</label>
+                      <input v-model.number="editForm.consultation_fee" type="number" min="0" class="form-input" />
+                    </div>
+                  </div>
+                  <div class="form-group" style="margin-top: 12px;">
+                    <label class="form-label">Descripción</label>
+                    <textarea v-model="editForm.description" class="form-input form-textarea" rows="3"></textarea>
+                  </div>
+                </div>
+              </div>
+
+              <div class="modal-footer">
+                <button class="btn-secondary" @click="editModal = false">Cancelar</button>
+                <button class="btn-primary" @click="saveEdit" :disabled="editSaving">
+                  {{ editSaving ? 'Guardando...' : '💾 Guardar Cambios' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
     </div>
   </AppLayout>
 </template>
@@ -534,16 +618,65 @@ function formatDate(dateStr: string) {
 
 .doctor-card__actions { display: flex; gap: 6px; margin-top: auto; padding-top: 8px; border-top: 1px solid #F3F4F6; }
 .action-btn {
-  flex: 1; padding: 6px 10px; border: 1px solid; border-radius: 6px;
-  font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
-  display: flex; align-items: center; justify-content: center; gap: 4px;
+  flex: 1; padding: 8px 10px; border: 1px solid; border-radius: 8px;
+  font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
 }
-.action-btn--approve { background: #F0FDF4; color: #065F46; border-color: #86EFAC; }
-.action-btn--approve:hover { background: #DCFCE7; }
-.action-btn--reject { background: #FEF2F2; color: #991B1B; border-color: #FCA5A5; }
-.action-btn--reject:hover { background: #FEE2E2; }
-.action-btn--pending { background: #FFFBEB; color: #92400E; border-color: #FCD34D; }
-.action-btn--pending:hover { background: #FEF3C7; }
+.action-btn--edit { background: #F0F9FF; color: #0369A1; border-color: #7DD3FC; }
+.action-btn--edit:hover { background: #E0F2FE; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex;
+  align-items: center; justify-content: center; z-index: 9999; padding: 1rem;
+}
+.modal-card {
+  background: #FFF; border-radius: 16px; width: 100%;
+  max-width: 560px; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+.modal-header {
+  display: flex; align-items: center; gap: 12px; padding: 24px 24px 0;
+}
+.modal-header__avatar {
+  width: 48px; height: 48px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center; color: #FFF;
+  font-weight: 700; font-size: 0.9rem; flex-shrink: 0;
+}
+.modal-title { margin: 0; font-size: 1.1rem; color: #111827; }
+.modal-subtitle { margin: 2px 0 0; font-size: 0.82rem; color: #6B7280; }
+.modal-close {
+  margin-left: auto; background: none; border: none; font-size: 1.5rem;
+  color: #9CA3AF; cursor: pointer; line-height: 1;
+}
+.modal-close:hover { color: #374151; }
+
+.modal-body { padding: 20px 24px; }
+.modal-section { margin-bottom: 20px; }
+.modal-section h4 { margin: 0 0 10px; font-size: 0.95rem; color: #111827; }
+
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.info-item { background: #F9FAFB; border-radius: 8px; padding: 8px 12px; }
+.info-label { display: block; font-size: 0.72rem; color: #6B7280; font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em; }
+.info-value { font-size: 0.88rem; color: #111827; font-weight: 500; }
+
+.edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.status-toggle { display: flex; gap: 4px; }
+.st-btn {
+  flex: 1; padding: 8px 6px; border: 2px solid #E5E7EB; border-radius: 8px;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  background: #FFF; color: #374151;
+}
+.st-btn--active.st--approved { background: #D1FAE5; border-color: #10B981; color: #065F46; }
+.st-btn--active.st--pending { background: #FEF3C7; border-color: #F59E0B; color: #92400E; }
+.st-btn--active.st--rejected { background: #FEE2E2; border-color: #EF4444; color: #991B1B; }
+.st-btn:hover { border-color: #9CA3AF; }
+
+.modal-footer {
+  padding: 16px 24px 24px; display: flex; justify-content: flex-end; gap: 10px;
+  border-top: 1px solid #F3F4F6;
+}
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
@@ -554,5 +687,7 @@ function formatDate(dateStr: string) {
   .doctor-grid { grid-template-columns: 1fr; }
   .doc-mgr__header { flex-direction: column; }
   .filter-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .info-grid, .edit-grid { grid-template-columns: 1fr; }
+  .status-toggle { flex-direction: column; }
 }
 </style>
