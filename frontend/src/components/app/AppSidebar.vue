@@ -50,6 +50,13 @@
         </ul>
       </nav>
 
+      <div v-if="showBookingCta" class="sidebar-cta">
+        <Link href="/directory" class="cta-btn">
+          <i class="pi pi-calendar-plus"></i>
+          <span>Agendar Cita</span>
+        </Link>
+      </div>
+
       <div class="sidebar-footer">
         <div class="user-profile">
           <div class="avatar">{{ userInitials }}</div>
@@ -185,6 +192,10 @@ const roleDisplay = computed(() => {
     agent: 'Agente'
   }
   return roleNames[user.value.role] || user.value.role || 'Usuario'
+})
+
+const showBookingCta = computed(() => {
+  return ['patient', 'agent', 'admin'].includes(currentRole.value)
 })
 
 const logout = () => {
@@ -463,5 +474,43 @@ const logout = () => {
     max-height: calc(100vh - 70px);
     background-color: var(--color-sidebar-bg, #0D2622);
   }
+}
+
+.sidebar-cta {
+  padding: 0 16px;
+  margin-bottom: 12px;
+}
+
+.cta-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, var(--color-accent, #8FC9B3), var(--color-primary-600, #0E5D52));
+  color: #FFFFFF;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(14, 93, 82, 0.3);
+}
+
+.cta-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(14, 93, 82, 0.4);
+  filter: brightness(1.05);
+}
+
+.cta-btn:active {
+  transform: translateY(0);
+}
+
+.cta-btn i {
+  font-size: 16px;
 }
 </style>

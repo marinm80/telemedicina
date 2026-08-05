@@ -14,6 +14,7 @@
       </main>
     </div>
     <AppFooter />
+    <FloatingAssistant />
   </div>
 </template>
 
@@ -21,10 +22,9 @@
 import { ref, provide, computed } from 'vue'
 import { usePage } from '@inertiajs/vue3'
 import AppSidebar from '@/components/app/AppSidebar.vue'
-// Mock imports for DemoBanner and AppFooter as they were in the layout snippet
-// Ensure to import them properly in a real scenario
 import DemoBanner from '@/components/DemoBanner.vue'
 import AppFooter from '@/components/AppFooter.vue'
+import FloatingAssistant from '@/components/FloatingAssistant.vue'
 
 const page = usePage()
 const user = computed(() => (page.props as any).auth?.user || {})

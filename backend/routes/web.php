@@ -56,5 +56,67 @@ Route::middleware('auth')->group(function () {
         Route::get('/consultation/{appointmentId}', [ConsultationRoomController::class, 'show'])->name('consultation.show');
     });
 
+    // ─── Secciones del Panel (Coming Soon placeholders) ───
+    // Admin
+    Route::get('/admin/verificaciones', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Verificación de Médicos',
+        'description' => 'Aprueba o rechaza solicitudes de nuevos médicos en la plataforma.',
+    ]))->name('admin.verificaciones');
+
+    Route::get('/admin/medicos', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Gestión de Médicos',
+        'description' => 'Administra perfiles, especialidades y disponibilidad de los médicos.',
+    ]))->name('admin.medicos');
+
+    Route::get('/admin/pacientes', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Gestión de Pacientes',
+        'description' => 'Consulta perfiles de pacientes y su historial de citas.',
+    ]))->name('admin.pacientes');
+
+    Route::get('/admin/facturacion', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Facturación',
+        'description' => 'Revisa ingresos, pagos y comisiones de la plataforma.',
+    ]))->name('admin.facturacion');
+
+    Route::get('/admin/ajustes', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Ajustes del Sistema',
+        'description' => 'Configura parámetros generales de la plataforma.',
+    ]))->name('admin.ajustes');
+
+    // Doctor
+    Route::get('/admin/notas', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Notas Clínicas',
+        'description' => 'Gestiona tus notas SOAP, borradores y enmiendas.',
+    ]))->name('admin.notas');
+
+    Route::get('/admin/recetas', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Recetas Médicas',
+        'description' => 'Emite y gestiona prescripciones de tus pacientes.',
+    ]))->name('admin.recetas');
+
+    Route::get('/admin/ingresos', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Mis Ingresos',
+        'description' => 'Consulta tus ganancias, comisiones y estado de pagos.',
+    ]))->name('admin.ingresos');
+
+    Route::get('/admin/perfil', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Mi Perfil',
+        'description' => 'Edita tu información profesional y configuración de cuenta.',
+    ]))->name('admin.perfil');
+
+    // Patient
+    Route::get('/admin/resultados', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Mis Resultados',
+        'description' => 'Consulta resultados de laboratorio y estudios médicos.',
+    ]))->name('admin.resultados');
+
+    Route::get('/admin/pagos', fn() => Inertia::render('ComingSoon', [
+        'title' => 'Mis Pagos',
+        'description' => 'Revisa tu historial de pagos y métodos de pago.',
+    ]))->name('admin.pagos');
+
+    // Agent
+    Route::get('/admin/citas', fn() => redirect('/appointments'))->name('admin.citas');
+
     Route::post('/logout', [AuthController::class, 'destroy'])->name('logout');
 });
