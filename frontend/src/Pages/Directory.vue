@@ -8,6 +8,7 @@
 import { ref, computed, inject, onMounted, onUnmounted } from 'vue';
 import { i18nKey } from '@/i18n/plugin';
 import { useAppState } from '@/composables/useAppState';
+import AppLayout from '@/layouts/AppLayout.vue';
 import SpinnerLoader from '@/components/ui/SpinnerLoader.vue';
 import ErrorFallback from '@/components/ui/ErrorFallback.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
@@ -58,6 +59,7 @@ function clearFilters() {
 </script>
 
 <template>
+  <AppLayout>
   <div class="directory">
     <header class="directory__header">
       <h1 class="directory__title">Directorio de Especialistas</h1>
@@ -171,6 +173,7 @@ function clearFilters() {
       </div>
     </div>
   </div>
+  </AppLayout>
 </template>
 
 <style scoped>

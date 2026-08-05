@@ -99,8 +99,11 @@ const scrollToBottom = async () => {
 };
 
 const navigate = (url: string) => {
-  isOpen.value = false;
-  router.visit(url);
+  router.visit(url, {
+    onStart: () => {
+      isOpen.value = false;
+    }
+  });
 };
 
 const sendMessage = () => {
