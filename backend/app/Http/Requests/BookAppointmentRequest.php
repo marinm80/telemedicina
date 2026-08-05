@@ -20,6 +20,10 @@ final class BookAppointmentRequest extends FormRequest
      */
     public function authorize(): bool
     {
+        if (!$this->user()) {
+            return false;
+        }
+
         return $this->user()->can('create', [
             \App\Models\Appointment::class,
             $this->input('patient_id')

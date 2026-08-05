@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Middleware\SetPostgresSessionContext;
 
-Route::middleware([SetPostgresSessionContext::class])->group(function () {
+Route::middleware(['web', SetPostgresSessionContext::class])->group(function () {
     // 1. Endpoint de disponibilidad
     Route::get('/doctors/{id}/availability', [AppointmentController::class, 'availability']);
 
