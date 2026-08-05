@@ -431,7 +431,35 @@ async function confirmBooking() {
 
     if (res.ok) {
       bookingStep.value = 'done';
-      addMessage('assistant', '🎉 <strong>¡Tu cita ha sido agendada exitosamente!</strong><br><br>📋 Puedes verla en <strong>"Mis Citas"</strong> en el menú lateral.<br><br>¿Necesitas algo más?');
+      
+      // Format date for display
+      const dateObj = new Date(booking.slotStart);
+      const dateFormatted = dateObj.toLocaleDateString('es-ES', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+
+      const summaryHtml = `
+        🎉 <strong>¡Cita agendada exitosamente!</strong>
+        <div style="background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 10px; padding: 14px; margin-top: 10px;">
+          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.88rem;">
+            <div>👨‍⚕️ <strong>Doctor:</strong> ${booking.doctorName}</div>
+            <div>🏥 <strong>Especialidad:</strong> ${booking.specialtyName}</div>
+            <div>📅 <strong>Fecha:</strong> ${dateFormatted}</div>
+            <div>🕐 <strong>Horario:</strong> ${booking.slotLocalTime}</div>
+            <div>📋 <strong>Motivo:</strong> ${booking.reason}</div>
+            <div style="margin-top: 4px; padding-top: 6px; border-top: 1px dashed #86EFAC;">
+              ✅ <strong>Estado:</strong> <span style="color: #065F46;">Pendiente de confirmación</span>
+            </div>
+          </div>
+        </div>
+        <br>📌 Puedes ver y gestionar tus citas en <strong>"Mis Citas"</strong> en el menú lateral.
+        <br><br>¿Necesitas algo más?
+      `.trim();
+
+      addMessage('assistant', summaryHtml);
     } else if (res.status === 409) {
       addMessage('assistant', '⚠️ Ese horario acaba de ser ocupado por otro paciente. Vamos a buscar otro horario.');
       bookingStep.value = 'fecha';
