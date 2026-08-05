@@ -13,19 +13,19 @@ final class SetPostgresSessionContext
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if (Auth::check() && ($user = Auth::user())) {
-            $userId = $user->id;
+        // Auth::id() lee el id directo de la sesión sin disparar la
+        // hidratación del modelo (evita la circularidad: retrieveById()
+        // es una consulta protegida por RLS, y hasta este punto el GUC
+        // todavía no está seteado). Recién con app.current_user_id fijado
+        // es seguro llamar a Auth::user(): las policies de users/user_roles
+        // tienen una cláusula "id = current_user_id" que no depende del rol,
+        // así que la propia fila del usuario ya es visible en este punto.
+        $userId = Auth::id();
 
-            // 1. Establecer user_id en la conexión PostgreSQL para RLS
-            DB::statement("SET app.current_user_id = '{$userId}'");
+        DB::statement("SET app.current_user_id = '" . ($userId ?? '') . "'");
 
-            // 2. Establecer el rol del usuario en PostgreSQL para RLS
-            $role = $user->role ?? 'patient';
-            DB::statement("SET app.current_user_role = '{$role}'");
-        } else {
-            DB::statement("SET app.current_user_id = ''");
-            DB::statement("SET app.current_user_role = 'guest'");
-        }
+        $role = $userId ? (Auth::user()?->role ?? 'patient') : 'guest';
+        DB::statement("SET app.current_user_role = '{$role}'");
 
         return $next($request);
     }

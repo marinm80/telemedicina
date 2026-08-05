@@ -16,13 +16,25 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->web(prepend: [
-            \App\Http\Middleware\SetPostgresSessionContext::class,
-        ]);
-
         $middleware->web(append: [
+            \App\Http\Middleware\SetPostgresSessionContext::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
         ]);
+
+        // SetPostgresSessionContext necesita correr DESPUÉS de StartSession
+        // (para que la sesión ya esté cargada) pero ANTES de Authenticate
+        // (alias 'auth'): Authenticate rehidrata al usuario desde la sesión
+        // vía retrieveById(), una consulta protegida por RLS. Sin el GUC
+        // app.current_user_id seteado antes de esa consulta, RLS la bloquea
+        // y el usuario queda "deslogueado" en cada request posterior al
+        // login. Por defecto Laravel ordena el grupo 'web' con Authenticate
+        // (vía el contrato AuthenticatesRequests) antes que SubstituteBindings,
+        // y este middleware -al no estar en la lista de prioridad- terminaba
+        // corriendo después de ambos sin importar dónde se lo registrara.
+        $middleware->appendToPriorityList(
+            after: \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+            append: \App\Http\Middleware\SetPostgresSessionContext::class,
+        );
 
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserRole::class,
