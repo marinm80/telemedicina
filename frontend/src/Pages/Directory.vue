@@ -9,6 +9,7 @@ import { ref, computed, inject, onMounted, onUnmounted } from 'vue';
 import { i18nKey } from '@/i18n/plugin';
 import { useAppState } from '@/composables/useAppState';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { Link } from '@inertiajs/vue3';
 import SpinnerLoader from '@/components/ui/SpinnerLoader.vue';
 import ErrorFallback from '@/components/ui/ErrorFallback.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
@@ -166,9 +167,9 @@ function clearFilters() {
         </div>
 
         <div class="card__footer">
-          <button type="button" class="card__cta">
+          <Link :href="`/booking/${doctor.id}`" class="card__cta">
             Ver Disponibilidad
-          </button>
+          </Link>
         </div>
       </div>
     </div>
@@ -400,6 +401,7 @@ function clearFilters() {
 }
 
 .card__cta {
+  display: block;
   width: 100%;
   padding: var(--spacing-2) var(--spacing-4);
   background-color: var(--color-primary-700);
@@ -410,6 +412,8 @@ function clearFilters() {
   font-weight: var(--font-medium);
   font-family: var(--font-body);
   cursor: pointer;
+  text-decoration: none;
+  text-align: center;
   transition: background-color var(--transition-fast);
 }
 
