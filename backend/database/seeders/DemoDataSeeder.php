@@ -7,116 +7,121 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Schema;
 
 class DemoDataSeeder extends Seeder
 {
     public function run(): void
     {
-        // Establecer contexto RLS administrativo (session-level, antes de la transacción)
-        $tempActorId = Str::uuid()->toString();
-        DB::statement("SELECT set_config('app.current_user_role', 'admin', false)");
-        DB::statement("SELECT set_config('app.current_user_id', '{$tempActorId}', false)");
+        // Usar conexión superuser para bypass RLS en seeders
+        $db = DB::connection('pgsql_admin');
 
-        DB::transaction(function () use ($tempActorId) {
-            
+        $db->transaction(function () use ($db) {
+
             $password = Hash::make('password');
             $now = now();
-            
-            // 1. Create specialties
-            $specialties = [
-                'Cardiología', 'Dermatología', 'Pediatría', 'Neurología', 
+
+            // Get role IDs
+            $roles = $db->table('roles')->pluck('id', 'name')->toArray();
+
+            // 1. Especialidades
+            $specialtyNames = [
+                'Cardiología', 'Dermatología', 'Pediatría', 'Neurología',
                 'Traumatología', 'Psiquiatría', 'Medicina General', 'Ginecología'
             ];
 
             $specialtyIds = [];
-            foreach ($specialties as $specName) {
-                $specialty = DB::table('specialties')->where('name', $specName)->first();
-                if (!$specialty) {
-                    $id = Str::uuid()->toString();
-                    DB::table('specialties')->insert([
-                        'id' => $id,
-                        'name' => $specName,
-                        'description' => "Especialidad de $specName",
-                        'is_active' => true,
-                        'created_at' => $now,
-                        'updated_at' => $now,
-                    ]);
-                    $specialtyIds[$specName] = $id;
+            foreach ($specialtyNames as $name) {
+                $existing = $db->table('specialties')->where('name', $name)->first();
+                if ($existing) {
+                    $specialtyIds[$name] = $existing->id;
                 } else {
-                    $specialtyIds[$specName] = $specialty->id;
+                    $id = Str::uuid()->toString();
+                    $db->table('specialties')->insert([
+                        'id'          => $id,
+                        'name'        => $name,
+                        'description' => "Especialidad de {$name}",
+                        'is_active'   => true,
+                        'created_at'  => $now,
+                        'updated_at'  => $now,
+                    ]);
+                    $specialtyIds[$name] = $id;
                 }
             }
 
-            // Roles array for user_roles table if it's used
-            $roles = Schema::hasTable('roles') ? DB::table('roles')->pluck('id', 'name')->toArray() : [];
-            $hasRoleCol = Schema::hasColumn('users', 'role');
-            $hasIsActiveCol = Schema::hasColumn('users', 'is_active');
-
-            // 2. Create 5 doctors
+            // 2. Doctores
             $doctors = [
                 [
-                    'name' => 'María', 'last_name' => 'García', 'email' => 'maria.garcia@salvia.test', 
+                    'name' => 'María', 'last_name' => 'García',
+                    'email' => 'maria.garcia@salvia.test',
                     'timezone' => 'America/Argentina/Buenos_Aires',
                     'specialties' => ['Cardiología'],
-                    'schedule' => '[08:00:00,17:00:00)'
+                    'franja' => '[08:00:00,17:00:00)',
+                    'fee' => 75000, 'exp' => 15, 'uni' => 'Universidad de Buenos Aires',
                 ],
                 [
-                    'name' => 'Alejandro', 'last_name' => 'Ruiz', 'email' => 'alejandro.ruiz@salvia.test', 
+                    'name' => 'Alejandro', 'last_name' => 'Ruiz',
+                    'email' => 'alejandro.ruiz@salvia.test',
                     'timezone' => 'America/Tegucigalpa',
                     'specialties' => ['Dermatología'],
-                    'schedule' => '[10:00:00,18:00:00)'
+                    'franja' => '[10:00:00,18:00:00)',
+                    'fee' => 60000, 'exp' => 8, 'uni' => 'Universidad Nacional Autónoma de Honduras',
                 ],
                 [
-                    'name' => 'Lucía', 'last_name' => 'Fernández', 'email' => 'lucia.fernandez@salvia.test', 
+                    'name' => 'Lucía', 'last_name' => 'Fernández',
+                    'email' => 'lucia.fernandez@salvia.test',
                     'timezone' => 'America/Mexico_City',
                     'specialties' => ['Pediatría'],
-                    'schedule' => '[08:00:00,17:00:00)'
+                    'franja' => '[08:00:00,17:00:00)',
+                    'fee' => 55000, 'exp' => 12, 'uni' => 'UNAM',
                 ],
                 [
-                    'id' => 'e894791a-215d-41a2-8aa8-60e702c37229',
+                    // Dr. Mendoza ya existe — solo agregar schedules faltantes
+                    'id'         => 'e894791a-215d-41a2-8aa8-60e702c37229',
                     'profile_id' => 'f17a288d-de23-4656-8615-67ba91114588',
-                    'name' => 'Carlos', 'last_name' => 'Mendoza', 'email' => 'carlos.mendoza@salvia.test', 
+                    'name' => 'Carlos', 'last_name' => 'Mendoza',
+                    'email' => 'carlos.mendoza@salvia.test',
                     'timezone' => 'America/Bogota',
                     'specialties' => ['Neurología'],
-                    'schedule' => '[08:00:00,17:00:00)'
+                    'franja' => '[08:00:00,17:00:00)',
+                    'fee' => 80000, 'exp' => 20, 'uni' => 'Universidad Nacional de Colombia',
                 ],
                 [
-                    'name' => 'Ana', 'last_name' => 'Torres', 'email' => 'ana.torres@salvia.test', 
+                    'name' => 'Ana', 'last_name' => 'Torres',
+                    'email' => 'ana.torres@salvia.test',
                     'timezone' => 'America/Santo_Domingo',
                     'specialties' => ['Medicina General', 'Psiquiatría'],
-                    'schedule' => '[07:00:00,15:00:00)'
-                ]
+                    'franja' => '[07:00:00,15:00:00)',
+                    'fee' => 45000, 'exp' => 6, 'uni' => 'Universidad Autónoma de Santo Domingo',
+                ],
             ];
 
-            foreach ($doctors as $docData) {
-                if (isset($docData['id'])) {
-                    $userId = $docData['id'];
-                    $user = DB::table('users')->where('id', $userId)->first();
-                } else {
-                    $user = DB::table('users')->where('email', $docData['email'])->first();
-                    $userId = $user ? $user->id : Str::uuid()->toString();
+            foreach ($doctors as $doc) {
+                // User
+                $userId = $doc['id'] ?? null;
+                $user = $userId
+                    ? $db->table('users')->where('id', $userId)->first()
+                    : $db->table('users')->where('email', $doc['email'])->first();
+
+                if (!$user && !$userId) {
+                    $userId = Str::uuid()->toString();
                 }
+                $userId = $userId ?? $user->id;
 
                 if (!$user) {
-                    $userData = [
-                        'id' => $userId,
-                        'name' => $docData['name'],
-                        'last_name' => $docData['last_name'],
-                        'email' => $docData['email'],
-                        'password' => $password,
-                        'timezone' => $docData['timezone'],
+                    $db->table('users')->insert([
+                        'id'         => $userId,
+                        'name'       => $doc['name'],
+                        'last_name'  => $doc['last_name'],
+                        'email'      => $doc['email'],
+                        'password'   => $password,
+                        'timezone'   => $doc['timezone'],
                         'created_at' => $now,
                         'updated_at' => $now,
-                    ];
-                    
-                    if ($hasRoleCol) $userData['role'] = 'doctor';
-                    if ($hasIsActiveCol) $userData['is_active'] = true;
-                    
-                    DB::table('users')->insert($userData);
-                    
+                    ]);
+
+                    // Assign doctor role
                     if (isset($roles['doctor'])) {
-                        DB::table('user_roles')->insertOrIgnore([
+                        $db->table('user_roles')->insertOrIgnore([
                             'user_id' => $userId,
                             'role_id' => $roles['doctor'],
                         ]);
@@ -124,104 +129,98 @@ class DemoDataSeeder extends Seeder
                 }
 
                 // Profile
-                if (isset($docData['profile_id'])) {
-                    $profileId = $docData['profile_id'];
-                    $profile = DB::table('doctor_profiles')->where('id', $profileId)->first();
-                } else {
-                    $profile = DB::table('doctor_profiles')->where('user_id', $userId)->first();
-                    $profileId = $profile ? $profile->id : Str::uuid()->toString();
+                $profileId = $doc['profile_id'] ?? null;
+                $profile = $profileId
+                    ? $db->table('doctor_profiles')->where('id', $profileId)->first()
+                    : $db->table('doctor_profiles')->where('user_id', $userId)->first();
+
+                if (!$profile && !$profileId) {
+                    $profileId = Str::uuid()->toString();
                 }
+                $profileId = $profileId ?? $profile->id;
 
                 if (!$profile) {
-                    DB::table('doctor_profiles')->insert([
-                        'id' => $profileId,
-                        'user_id' => $userId,
-                        'status' => 'approved',
-                        'consultation_fee' => 50000.00,
-                        'description' => "Especialista con amplia experiencia.",
-                        'years_experience' => 10,
-                        'university' => 'Universidad de la Ciudad',
-                        'created_at' => $now,
-                        'updated_at' => $now,
+                    $db->table('doctor_profiles')->insert([
+                        'id'               => $profileId,
+                        'user_id'          => $userId,
+                        'status'           => 'approved',
+                        'license_number'   => 'MED-' . strtoupper(substr(md5($doc['email']), 0, 8)),
+                        'consultation_fee' => $doc['fee'],
+                        'description'      => "Especialista con amplia experiencia en " . implode(' y ', $doc['specialties']) . ".",
+                        'years_experience' => $doc['exp'],
+                        'university'       => $doc['uni'],
+                        'created_at'       => $now,
+                        'updated_at'       => $now,
                     ]);
                 }
 
                 // Specialties
-                foreach ($docData['specialties'] as $specName) {
+                foreach ($doc['specialties'] as $specName) {
                     $specId = $specialtyIds[$specName];
-                    $hasSpec = DB::table('doctor_specialties')
+                    $exists = $db->table('doctor_specialties')
                         ->where('doctor_profile_id', $profileId)
                         ->where('specialty_id', $specId)
                         ->exists();
-
-                    if (!$hasSpec) {
-                        DB::table('doctor_specialties')->insert([
+                    if (!$exists) {
+                        $db->table('doctor_specialties')->insert([
                             'doctor_profile_id' => $profileId,
-                            'specialty_id' => $specId,
+                            'specialty_id'      => $specId,
                         ]);
                     }
                 }
 
-                // Schedules (Lunes a Viernes / 1 a 5)
+                // Schedules Lun-Vie (day_of_week 1-5)
                 for ($day = 1; $day <= 5; $day++) {
-                    $hasSchedule = DB::table('schedules')
+                    $hasSchedule = $db->table('schedules')
                         ->where('doctor_profile_id', $profileId)
                         ->where('day_of_week', $day)
                         ->whereNull('deleted_at')
                         ->exists();
 
                     if (!$hasSchedule) {
-                        DB::table('schedules')->insert([
-                            'id' => Str::uuid()->toString(),
+                        $db->table('schedules')->insert([
+                            'id'                => Str::uuid()->toString(),
                             'doctor_profile_id' => $profileId,
-                            'day_of_week' => $day,
-                            'franja' => $docData['schedule'],
-                            'slot_duration' => 30,
-                            'created_at' => $now,
-                            'updated_at' => $now,
+                            'day_of_week'       => $day,
+                            'franja'            => $doc['franja'],
+                            'slot_duration'     => 30,
+                            'created_at'        => $now,
+                            'updated_at'        => $now,
                         ]);
                     }
                 }
             }
 
-            // 5. Create 2 patient users
+            // 3. Pacientes de prueba
             $patients = [
-                ['name' => 'Juan', 'last_name' => 'Pérez', 'email' => 'patient@salvia.test'],
+                ['name' => 'Juan',  'last_name' => 'Pérez', 'email' => 'patient@salvia.test'],
                 ['name' => 'María', 'last_name' => 'López', 'email' => 'maria@salvia.test'],
             ];
 
-            foreach ($patients as $patData) {
-                $user = DB::table('users')->where('email', $patData['email'])->first();
-                $userId = $user ? $user->id : Str::uuid()->toString();
-
-                if (!$user) {
-                    $userData = [
-                        'id' => $userId,
-                        'name' => $patData['name'],
-                        'last_name' => $patData['last_name'],
-                        'email' => $patData['email'],
-                        'password' => $password,
-                        'timezone' => 'America/Santiago', // default for test
+            foreach ($patients as $pat) {
+                $exists = $db->table('users')->where('email', $pat['email'])->exists();
+                if (!$exists) {
+                    $db->table('users')->insert([
+                        'id'         => Str::uuid()->toString(),
+                        'name'       => $pat['name'],
+                        'last_name'  => $pat['last_name'],
+                        'email'      => $pat['email'],
+                        'password'   => $password,
+                        'timezone'   => 'America/Santo_Domingo',
                         'created_at' => $now,
                         'updated_at' => $now,
-                    ];
-                    
-                    if ($hasRoleCol) $userData['role'] = 'patient';
-                    if ($hasIsActiveCol) $userData['is_active'] = true;
-                    
-                    DB::table('users')->insert($userData);
+                    ]);
 
-                    if (isset($roles['patient'])) {
-                        DB::table('user_roles')->insertOrIgnore([
-                            'user_id' => $userId,
+                    // Assign patient role
+                    $patUser = $db->table('users')->where('email', $pat['email'])->first();
+                    if ($patUser && isset($roles['patient'])) {
+                        $db->table('user_roles')->insertOrIgnore([
+                            'user_id' => $patUser->id,
                             'role_id' => $roles['patient'],
                         ]);
                     }
                 }
             }
-            
-            // Restaurar contexto administrativo al finalizar la transacción de forma segura
-            DB::statement("SELECT set_config('app.current_user_role', '', false)");
         });
     }
 }
