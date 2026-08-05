@@ -91,13 +91,13 @@
             <div v-else class="slots-grid">
               <button
                 v-for="slot in availableSlots"
-                :key="slot.slot_start"
+                :key="slot.start"
                 class="slot-btn"
                 :class="{ 'slot-btn--unavailable': !slot.available }"
                 :disabled="!slot.available"
                 @click="selectSlot(slot)"
               >
-                {{ slot.local_start_time }}
+                {{ slot.local_start }}
               </button>
             </div>
           </div>
@@ -163,10 +163,10 @@ interface Message {
 }
 
 interface SlotInfo {
-  slot_start: string;
-  slot_end: string;
-  local_start_time: string;
-  local_end_time: string;
+  start: string;
+  end: string;
+  local_start: string;
+  local_end: string;
   available: boolean;
 }
 
@@ -394,10 +394,10 @@ async function selectDate() {
 }
 
 function selectSlot(slot: SlotInfo) {
-  booking.slotStart = slot.slot_start;
-  booking.slotEnd = slot.slot_end;
-  booking.slotLocalTime = `${slot.local_start_time} - ${slot.local_end_time}`;
-  addMessage('user', `🕐 ${slot.local_start_time}`);
+  booking.slotStart = slot.start;
+  booking.slotEnd = slot.end;
+  booking.slotLocalTime = `${slot.local_start} - ${slot.local_end}`;
+  addMessage('user', `🕐 ${slot.local_start}`);
   bookingStep.value = 'confirmacion';
   simulateTyping('Perfecto. Revisa los datos de tu cita y confirma:', 600);
 }
