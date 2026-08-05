@@ -58,10 +58,7 @@ Route::middleware('auth')->group(function () {
 
     // ─── Secciones del Panel (Coming Soon placeholders) ───
     // Admin
-    Route::get('/admin/verificaciones', fn() => Inertia::render('ComingSoon', [
-        'title' => 'Verificación de Médicos',
-        'description' => 'Aprueba o rechaza solicitudes de nuevos médicos en la plataforma.',
-    ]))->name('admin.verificaciones');
+    Route::get('/admin/verificaciones', fn() => Inertia::render('Admin/DoctorManager'))->name('admin.verificaciones');
 
     Route::get('/admin/medicos', fn() => Inertia::render('Admin/ScheduleManager'))->name('admin.medicos');
 

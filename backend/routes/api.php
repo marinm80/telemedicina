@@ -63,6 +63,10 @@ Route::middleware(['web', SetPostgresSessionContext::class])->group(function () 
 
     // Admin schedule management
     Route::middleware('role:admin')->prefix('admin')->group(function () {
+        Route::get('/doctors', [\App\Http\Controllers\Api\AdminDoctorController::class, 'index']);
+        Route::post('/doctors', [\App\Http\Controllers\Api\AdminDoctorController::class, 'store']);
+        Route::patch('/doctors/{id}/status', [\App\Http\Controllers\Api\AdminDoctorController::class, 'updateStatus']);
+
         Route::get('/schedules', [\App\Http\Controllers\Api\AdminScheduleController::class, 'index']);
         Route::post('/schedules', [\App\Http\Controllers\Api\AdminScheduleController::class, 'store']);
         Route::delete('/schedules/{id}', [\App\Http\Controllers\Api\AdminScheduleController::class, 'destroy']);
