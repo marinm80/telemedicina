@@ -219,6 +219,7 @@ And los pacientes ven la nueva disponibilidad
 - Backend: tabla referrals con RLS, modelo Referral, ReferralController
 - API: GET/POST /api/referrals, PUT /api/referrals/{id}
 - Auto-selección de médico general si solo hay 1 disponible
+- Selección de modalidad: teleconsulta (remota) o presencial (en sitio)
 
 
 

@@ -16,9 +16,11 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.
 - **Sección "Referir a Especialista" en ConsultationView**: El médico general puede agregar 1+ referidos con especialidad (15 opciones), motivo, prioridad (normal/urgente), y notas.
 - **Rutas API**: GET/POST `/api/referrals`, PUT `/api/referrals/{id}`.
 - **Auto-selección**: Si solo hay 1 médico general disponible, se selecciona automáticamente.
+- **Modalidad de consulta**: Nuevo paso en el chat para elegir entre 💻 Teleconsulta (remota) o 🏢 Presencial (en sitio). Se muestra en la confirmación, resumen y email demo.
 
 ### Cambiado
 - `agentStateMachine.ts`: Estados `TIME_PREFERENCE`, `SUGGEST_PRESENCIAL`, `COLLECT_SYMPTOMS_ONSET` ahora saltan directamente a `SELECT_DOCTOR` (skip `SELECT_SPECIALTY`).
+- `agentStateMachine.ts`: Nuevo estado `SELECT_MODALITY` entre triage y preferencia horaria. Campo `modality` en `AgentContext`.
 - `FloatingAssistant.vue`: Eliminada función `selectSpecialty()`, eliminada sección template de `SELECT_SPECIALTY`, `matchingDoctors` auto-filtra a Medicina General.
 - `SELECT_DOCTOR` message: "Te conectaremos con un médico de Medicina General que evaluará tu caso."
 
