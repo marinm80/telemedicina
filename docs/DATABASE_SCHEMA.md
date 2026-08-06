@@ -1208,6 +1208,7 @@ GRANT SELECT, INSERT, UPDATE ON prescriptions TO app_runtime;
 | patient_id | uuid FK | Paciente referido (users.id) |
 | specialty_name | varchar(100) | Especialidad destino |
 | specialty_id | uuid FK? | Referencia a specialties(id) — resuelto automáticamente |
+| appointment_id | uuid FK? | FK a appointments(id) — cita que el paciente agendó con el especialista |
 | referred_doctor_id | uuid FK? | Doctor específico (opcional) |
 | reason | text | Motivo de la referencia |
 | priority | varchar(20) | 'normal' \| 'urgente' |
@@ -1218,3 +1219,6 @@ GRANT SELECT, INSERT, UPDATE ON prescriptions TO app_runtime;
 
 **RLS Policies:** patient (SELECT propios), doctor (ALL propios), admin (ALL)
 
+### Notas sobre IDs de referrals
+- `consultation_id`: consulta del médico que REFIERE (origen, médico general)
+- `appointment_id`: cita que el paciente AGENDÓ con el especialista (destino)

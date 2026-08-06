@@ -3,8 +3,8 @@
 > **Proyecto**: AI-Proyecto_11_Telemedicina (Portafolio)
 > **Autor**: Rafael Marín · [rafaelmarin.dev](https://rafaelmarin.dev)
 > **Fecha**: 2026-08-06
-> **Versión actual**: 0.6.0
-> **Commits totales**: 75
+> **Versión actual**: 0.7.0
+> **Commits totales**: 79
 
 ---
 

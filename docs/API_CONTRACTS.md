@@ -728,5 +728,62 @@ DELETE /api/doctor/schedules/{id}
 - Body: `{ status: 'pending'|'accepted'|'completed'|'cancelled', notes? }`
 - Response: 200 `{ data: Referral }`
 
+---
 
+## Especialidades (v0.7.0)
 
+### `GET /api/specialties`
+
+Retorna catálogo de especialidades activas.
+
+**Response 200:**
+```json
+{
+  "data": [
+    { "id": "uuid", "name": "Cardiología" },
+    { "id": "uuid", "name": "Dermatología" }
+  ]
+}
+```
+
+## Referidos → Agendamiento (v0.7.0)
+
+### Ciclo de vida del referido
+
+| Transición | Trigger | Endpoint | Campo actualizado |
+|------------|---------|----------|-------------------|
+| `pending` → `accepted` | Paciente agenda cita desde referido | `POST /api/appointments` (con `referral_id`) | `status`, `appointment_id` |
+| `accepted` → `completed` | Especialista archiva la consulta | `POST /api/consultations/{id}/archive` | `status` |
+
+### `POST /api/appointments` (actualizado v0.7.0)
+
+Nuevo campo opcional:
+```json
+{
+  "referral_id": "uuid (nullable) — si viene de un referido, marca el referido como accepted"
+}
+```
+
+### Inertia: `Patient/MyReferrals`
+
+**Ruta**: `/paciente/referidos`
+
+**Props:**
+```typescript
+{
+  referrals: Array<{
+    id: string;
+    specialty_name: string;
+    specialty_id: string | null;
+    reason: string;
+    priority: 'normal' | 'urgente';
+    status: 'pending' | 'accepted' | 'completed' | 'cancelled';
+    notes: string | null;
+    referring_doctor: { name: string } | null;
+    referred_doctor: { name: string } | null;
+    referred_doctor_profile_id: string | null;
+    appointment: { id: string; franja_start: string; status: string } | null;
+    created_at: string;
+  }>
+}
+```

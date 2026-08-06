@@ -5,6 +5,35 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-08-06 - Flujo Referidos → Agendamiento
+
+### Añadido
+- **Página `Patient/MyReferrals.vue`**: Página dedicada con 3 tabs (Pendientes / Aceptados / Completados). Cards con especialidad, motivo, médico referente, fecha y botón de acción.
+- **Deep-link desde referido**: Si el médico especificó `referred_doctor_id` → directo a `/booking/{doctorProfileId}`. Si solo especialidad → `/directory?specialty_id=X`.
+- **Ciclo de vida completo**: `pending` → `accepted` (al agendar cita) → `completed` (al firmar nota del especialista). Dos transiciones: `BookAppointmentAction` y `ConsultationFormController::archive()`.
+- **Badge urgente**: Referidos con prioridad `urgente` muestran badge terracotta con animación pulsante y texto de urgencia. Se ordenan primero en cada tab.
+- **Sidebar**: Nuevo item “Mis Referidos” para pacientes con badge de pendientes.
+- **Endpoint `GET /api/specialties`**: Catálogo de especialidades activas para el select dinámico.
+- **Ruta `/paciente/referidos`**: Página Inertia con joins a users, doctor_profiles, specialties y appointments.
+- **`appointment_id` en referrals**: FK a appointments para rastrear la cita del especialista.
+
+### Corregido
+- **RLS referrals (P1)**: Políticas usaban `app.user_id` en vez de `app.current_user_id`. Corregido con DROP + CREATE.
+- **specialty_id FK (P2)**: Agregado `specialty_id uuid REFERENCES specialties(id)` con resolución automática.
+- **Rutas duplicadas**: Eliminado bloque `auth:sanctum` duplicado de referrals en `api.php`.
+
+### Cambiado
+- `ConsultationView.vue`: Input de especialidad cambiado de texto libre a `<select>` contra catálogo real (`GET /api/specialties`).
+- `ReferralController::store()`: Resuelve `specialty_id` desde catálogo automáticamente.
+- `ReferralController::index()`: Ordena por urgente primero, eager load de `appointment` y `specialty`.
+- `BookAppointmentRequest`: Acepta `referral_id` (nullable uuid).
+
+### Notas Técnicas
+- `referrals.consultation_id` = consulta del médico que REFIERE (origen).
+- `referrals.appointment_id` = cita que el paciente AGENDÓ con el especialista (destino).
+- La transición `accepted→completed` ocurre dentro de `archive()` sin tocar el flujo de firma.
+- `pendingReferrals` es un shared prop lazy-loaded solo para pacientes.
+
 ## [0.6.0] - 2026-08-06 - Filtro Medicina General + Sistema de Referidos
 
 ### Añadido
