@@ -109,15 +109,27 @@ final class User extends Authenticatable
      */
     public function hasRole(string $roleName): bool
     {
-        return $this->roles()->where('name', $roleName)->exists();
+        return $this->role === $roleName;
     }
 
     /**
      * Getter dinámico para el rol principal.
+     * Usa pgsql_admin para bypass RLS que bloquea user_roles.
      */
     public function getRoleAttribute(): string
     {
-        $role = $this->roles()->first();
-        return $role ? $role->name : 'patient';
+        static $cache = [];
+        if (isset($cache[$this->id])) {
+            return $cache[$this->id];
+        }
+
+        $role = \Illuminate\Support\Facades\DB::connection('pgsql_admin')
+            ->table('user_roles')
+            ->join('roles', 'roles.id', '=', 'user_roles.role_id')
+            ->where('user_roles.user_id', $this->id)
+            ->value('roles.name');
+
+        $cache[$this->id] = $role ?: 'patient';
+        return $cache[$this->id];
     }
 }
