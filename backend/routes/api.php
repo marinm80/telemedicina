@@ -44,6 +44,17 @@ Route::middleware(['web', SetPostgresSessionContext::class])->group(function () 
     Route::post('/consultations/{id}/acknowledge', [\App\Http\Controllers\Api\ConsultationNoteController::class, 'acknowledge']);
     Route::post('/consultations/{id}/notes/ack', [\App\Http\Controllers\Api\ConsultationNoteController::class, 'acknowledge']);
 
+    // Consultation form management
+    Route::post('/consultations/{id}/form', [\App\Http\Controllers\Api\ConsultationFormController::class, 'store']);
+    Route::post('/consultations/{id}/archive', [\App\Http\Controllers\Api\ConsultationFormController::class, 'archive']);
+    Route::get('/consultations/{id}/form', [\App\Http\Controllers\Api\ConsultationFormController::class, 'show']);
+
+    // Prescriptions
+    Route::get('/prescriptions', [\App\Http\Controllers\Api\PrescriptionController::class, 'index']);
+    Route::post('/prescriptions', [\App\Http\Controllers\Api\PrescriptionController::class, 'store']);
+    Route::put('/prescriptions/{id}', [\App\Http\Controllers\Api\PrescriptionController::class, 'update']);
+    Route::delete('/prescriptions/{id}', [\App\Http\Controllers\Api\PrescriptionController::class, 'destroy']);
+
     // Start a consultation (creates record if not exists)
     Route::post('/consultations/{appointmentId}/start', function (\Illuminate\Http\Request $request, string $appointmentId) {
         $user = $request->user();
