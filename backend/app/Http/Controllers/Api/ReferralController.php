@@ -43,10 +43,16 @@ final class ReferralController extends Controller
             return response()->json(['message' => 'No autorizado.'], 403);
         }
 
+        // Resolve specialty_id from catalog
+        $specialty = $db->table('specialties')
+            ->whereRaw('LOWER(name) = LOWER(?)', [$validated['specialty_name']])
+            ->first();
+
         $referral = Referral::create([
             'consultation_id' => $validated['consultation_id'],
             'referring_doctor_id' => $user->id,
             'patient_id' => $appointment->patient_id,
+            'specialty_id' => $specialty?->id,
             'specialty_name' => $validated['specialty_name'],
             'reason' => $validated['reason'],
             'priority' => $validated['priority'],
@@ -55,7 +61,7 @@ final class ReferralController extends Controller
             'status' => 'pending',
         ]);
 
-        return response()->json(['data' => $referral], 201);
+        return response()->json(['data' => $referral->load('specialty')], 201);
     }
 
     /**
@@ -66,7 +72,7 @@ final class ReferralController extends Controller
         $user = Auth::user();
         if (!$user) return response()->json(['message' => 'No autenticado.'], 401);
 
-        $query = Referral::with(['consultation', 'referringDoctor', 'patient', 'referredDoctor']);
+        $query = Referral::with(['consultation', 'referringDoctor', 'patient', 'referredDoctor', 'specialty']);
 
         if ($user->role === 'admin') {
             $query->setConnection('pgsql_admin');

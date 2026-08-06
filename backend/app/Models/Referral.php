@@ -19,6 +19,7 @@ class Referral extends Model
         'consultation_id',
         'referring_doctor_id',
         'patient_id',
+        'specialty_id',
         'specialty_name',
         'referred_doctor_id',
         'reason',
@@ -50,5 +51,10 @@ class Referral extends Model
     public function referredDoctor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'referred_doctor_id');
+    }
+
+    public function specialty(): BelongsTo
+    {
+        return $this->belongsTo(Specialty::class);
     }
 }
