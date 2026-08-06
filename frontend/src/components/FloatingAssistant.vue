@@ -176,6 +176,8 @@ import {
   type AgentStateId, type AgentContext, type QuickOption, type AuditEntry,
 } from '@/lib/agentStateMachine';
 import { generateDemoMessage, type DemoMessage } from '@/lib/agentDemoMessage';
+import { evaluateTriage, getTriageLabel } from '@/lib/agentTriageRules';
+import { scoreAndSortSlots, getTopRecommendations, buildRecommendationHtml } from '@/lib/agentSlotScoring';
 
 // ── Types ──
 interface Message {
@@ -301,14 +303,25 @@ function transitionTo(stateId: AgentStateId) {
 }
 
 function buildTriageMessage(): string {
+  // Use the real triage rules engine
+  const evaluation = evaluateTriage(agentCtx.patientData);
+  agentCtx.triageResult = evaluation.result;
+  const label = getTriageLabel(evaluation.result);
+  logAudit(auditLog.value, 'TRIAGE_DECISION', 'TRIAGE_EVALUATED', `Rule: ${evaluation.matchedRule.id} → ${evaluation.result}`);
+
   const { symptomsSeverity, symptomsOnset, motivo } = agentCtx.patientData;
-  return `📊 <strong>Evaluación rápida completada</strong>
-    <div style="background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 8px; padding: 10px; margin-top: 6px; font-size: 0.82rem;">
+  return `📊 <strong>Evaluación clínica completada</strong>
+    <div style="background: ${label.bgColor}; border: 1px solid ${label.color}30; border-radius: 8px; padding: 12px; margin-top: 6px; font-size: 0.82rem;">
       <div>📋 Motivo: ${motivo}</div>
       <div>⏱️ Inicio: ${symptomsOnset}</div>
       <div>📈 Severidad: ${symptomsSeverity || 'N/A'}</div>
-      <div style="margin-top: 6px; padding-top: 6px; border-top: 1px dashed #86EFAC;">
-        ✅ Resultado: <strong>${agentCtx.triageResult === 'presencial' ? 'Se recomienda atención presencial' : 'Apto para teleconsulta'}</strong>
+      <div>💊 Alergias: ${agentCtx.patientData.allergies}</div>
+      <div>💊 Medicación: ${agentCtx.patientData.currentMedications}</div>
+      <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed ${label.color}30;">
+        ${label.icon} <strong>${label.label}</strong>
+      </div>
+      <div style="font-size: 0.78rem; color: #6B7280; margin-top: 4px;">
+        Regla: ${evaluation.matchedRule.id} — ${evaluation.reason}
       </div>
     </div>`;
 }
@@ -404,7 +417,18 @@ async function selectDate() {
 
     const available = availableSlots.value.filter(s => s.available);
     if (available.length > 0) {
-      addMessage('assistant', `Hay <strong>${available.length} horario(s) disponibles</strong>. <strong>¿Cuál prefieres?</strong>`);
+      // Score and sort slots using the scoring engine
+      const scoringCtx = {
+        preferredTimeOfDay: agentCtx.preferredTimeOfDay,
+        urgency: agentCtx.patientData.symptomsSeverity,
+      };
+      const scored = scoreAndSortSlots(availableSlots.value, scoringCtx);
+      availableSlots.value = scored; // replace with sorted
+
+      const top = getTopRecommendations(scored, 3);
+      const recoHtml = buildRecommendationHtml(top);
+
+      addMessage('assistant', `Hay <strong>${available.length} horario(s) disponibles</strong>.${recoHtml}<br><strong>¿Cuál prefieres?</strong>`);
     } else {
       addMessage('assistant', 'No hay horarios disponibles para esa fecha.');
     }
