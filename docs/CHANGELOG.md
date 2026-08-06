@@ -17,6 +17,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.
 - **Rutas API**: GET/POST `/api/referrals`, PUT `/api/referrals/{id}`.
 - **Auto-selección**: Si solo hay 1 médico general disponible, se selecciona automáticamente.
 - **Modalidad de consulta**: Nuevo paso en el chat para elegir entre 💻 Teleconsulta (remota) o 🏢 Presencial (en sitio). Se muestra en la confirmación, resumen y email demo.
+- **Dirección clínica para citas presenciales**: Al elegir modalidad presencial, el chat muestra la dirección completa (Av. Los Próceres 1240, Torre Médica Salvia, piso 4), referencia, parqueo y horarios. Al confirmar la cita, se repite como recordatorio con fecha y hora.
+- **Checklist pre-visita adaptable**: El checklist post-confirmación cambia según la modalidad — presencial incluye llegar 15 min antes y validar parqueo; teleconsulta incluye verificar cámara/mic y conexión.
 
 ### Cambiado
 - `agentStateMachine.ts`: Estados `TIME_PREFERENCE`, `SUGGEST_PRESENCIAL`, `COLLECT_SYMPTOMS_ONSET` ahora saltan directamente a `SELECT_DOCTOR` (skip `SELECT_SPECIALTY`).

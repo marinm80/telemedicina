@@ -220,6 +220,8 @@ And los pacientes ven la nueva disponibilidad
 - API: GET/POST /api/referrals, PUT /api/referrals/{id}
 - Auto-selección de médico general si solo hay 1 disponible
 - Selección de modalidad: teleconsulta (remota) o presencial (en sitio)
+- Dirección de clínica mostrada al elegir presencial y como recordatorio post-confirmación
+- Checklist pre-visita adaptable según modalidad (presencial vs teleconsulta)
 
 
 
