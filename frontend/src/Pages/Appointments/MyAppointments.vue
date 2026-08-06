@@ -6,7 +6,7 @@
 -->
 <script setup lang="ts">
 import { ref, computed, inject } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
 import { i18nKey } from '@/i18n/plugin';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { STATUS_CONFIG, getInitials, getAvatarColor } from '@/lib/mockData';
@@ -36,6 +36,39 @@ const props = defineProps<{
 
 const t = inject(i18nKey)!;
 const USER_TZ = 'America/Argentina/Buenos_Aires';
+
+const page = usePage();
+const userRole = computed(() => (page.props as any)?.auth?.user?.role || 'patient');
+const isDoctor = computed(() => userRole.value === 'doctor' || userRole.value === 'admin');
+const startingConsultation = ref<string | null>(null);
+
+async function startConsultation(appt: typeof props.appointments[0]) {
+  startingConsultation.value = appt.id;
+  try {
+    // If consultation_id exists, navigate directly
+    if (appt.consultation_id) {
+      router.visit(`/doctor/consulta/${appt.consultation_id}`);
+      return;
+    }
+    // Create consultation first
+    const res = await fetch(`/api/consultations/${appt.id}/start`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      router.visit(`/doctor/consulta/${data.consultation_id}`);
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      alert(errData.message || 'Error al iniciar consulta');
+    }
+  } catch (e: any) {
+    alert('Error: ' + e.message);
+  } finally {
+    startingConsultation.value = null;
+  }
+}
 
 type FilterTab = 'todas' | 'proximas' | 'pasadas';
 const activeTab = ref<FilterTab>('todas');
@@ -362,6 +395,17 @@ async function downloadPdf(consultationId: string) {
             <i :class="['pi', STATUS_CONFIG[appt.status]?.icon]" aria-hidden="true" />
             {{ STATUS_CONFIG[appt.status]?.label }}
           </span>
+          <!-- Doctor: Atender button -->
+          <button
+            v-if="isDoctor && (appt.status === 'pending' || appt.status === 'confirmed')"
+            type="button"
+            class="appt-card__action appt-card__action--attend"
+            :disabled="startingConsultation === appt.id"
+            @click="startConsultation(appt)"
+          >
+            <i class="pi pi-video" aria-hidden="true" />
+            {{ startingConsultation === appt.id ? 'Abriendo...' : 'Atender' }}
+          </button>
           <button
             v-if="appt.status === 'pending' || appt.status === 'confirmed'"
             type="button"
@@ -734,6 +778,17 @@ async function downloadPdf(consultationId: string) {
 .appt-card__action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.appt-card__action--attend {
+  border-color: #0E5D52;
+  color: #0E5D52;
+  font-weight: 700;
+  background: #F0FDF4;
+}
+.appt-card__action--attend:hover:not(:disabled) {
+  background: #0E5D52;
+  color: #FFF;
 }
 
 .appt-card__action--reschedule {

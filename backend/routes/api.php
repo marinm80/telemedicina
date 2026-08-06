@@ -44,6 +44,45 @@ Route::middleware(['web', SetPostgresSessionContext::class])->group(function () 
     Route::post('/consultations/{id}/acknowledge', [\App\Http\Controllers\Api\ConsultationNoteController::class, 'acknowledge']);
     Route::post('/consultations/{id}/notes/ack', [\App\Http\Controllers\Api\ConsultationNoteController::class, 'acknowledge']);
 
+    // Start a consultation (creates record if not exists)
+    Route::post('/consultations/{appointmentId}/start', function (\Illuminate\Http\Request $request, string $appointmentId) {
+        $user = $request->user();
+        if (!$user) return response()->json(['message' => 'No autenticado.'], 401);
+
+        $db = \Illuminate\Support\Facades\DB::connection('pgsql_admin');
+        $appointment = $db->table('appointments')->where('id', $appointmentId)->first();
+        if (!$appointment) return response()->json(['message' => 'Cita no encontrada.'], 404);
+        if ($appointment->doctor_id !== $user->id && $user->role !== 'admin') {
+            return response()->json(['message' => 'No autorizado.'], 403);
+        }
+
+        // Check if consultation exists
+        $existing = $db->table('consultations')->where('appointment_id', $appointmentId)->first();
+        if ($existing) {
+            return response()->json(['consultation_id' => $existing->id], 200);
+        }
+
+        // Create consultation
+        $id = \Illuminate\Support\Str::uuid()->toString();
+        $db->table('consultations')->insert([
+            'id' => $id,
+            'appointment_id' => $appointmentId,
+            'started_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Update appointment status to confirmed
+        if ($appointment->status === 'pending') {
+            $db->table('appointments')->where('id', $appointmentId)->update([
+                'status' => 'confirmed',
+                'updated_at' => now(),
+            ]);
+        }
+
+        return response()->json(['consultation_id' => $id], 201);
+    });
+
     // 8. Verificación Pública de Hash SHA-256 (RF-18)
     Route::get('/verify/note/{hash}', [\App\Http\Controllers\Api\VerificationController::class, 'verifyNote']);
 
