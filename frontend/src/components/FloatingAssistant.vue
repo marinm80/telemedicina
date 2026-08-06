@@ -130,6 +130,9 @@
               <div class="confirm-row"><strong>Motivo:</strong> {{ agentCtx.patientData.motivo }}</div>
               <div v-if="agentCtx.patientData.symptomsSeverity" class="confirm-row"><strong>Severidad:</strong> {{ agentCtx.patientData.symptomsSeverity }}</div>
               <div v-if="agentCtx.patientData.allergies" class="confirm-row"><strong>Alergias:</strong> {{ agentCtx.patientData.allergies }}</div>
+              <div v-if="holdSeconds > 0" class="hold-timer" :class="{ 'hold-timer--warning': holdSeconds < 60 }">
+                ⏱️ Reserva temporal: <strong>{{ formatHoldTime(holdSeconds) }}</strong>
+              </div>
               <div class="confirm-actions">
                 <button class="confirm-btn confirm-btn--yes" @click="confirmBooking" :disabled="submitting">
                   {{ submitting ? 'Agendando...' : '✅ Confirmar Cita' }}
@@ -208,6 +211,8 @@ const availableSlots = ref<SlotInfo[]>([]);
 const showDemoModal = ref(false);
 const demoMessage = ref<DemoMessage | null>(null);
 const copyLabel = ref('Copiar texto');
+const holdSeconds = ref(0);
+const holdTimerInterval = ref<number>(0);
 
 const messages = ref<Message[]>([]);
 
@@ -264,6 +269,20 @@ function avatarColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
   return colors[Math.abs(hash) % colors.length]!;
+}
+
+function formatHoldTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function clearHoldTimer() {
+  if (holdTimerInterval.value) {
+    clearInterval(holdTimerInterval.value);
+    holdTimerInterval.value = 0;
+  }
+  holdSeconds.value = 0;
 }
 
 function simulateTyping(responseText: string, delay = 800, isEmergency = false) {
@@ -447,10 +466,30 @@ function selectSlot(slot: SlotInfo) {
   agentCtx.bookingData.slotLocalTime = `${slot.local_start} - ${slot.local_end}`;
   addMessage('user', `🕐 ${slot.local_start}`);
   transitionTo('CONFIRMATION');
-  simulateTyping('Revisa los datos de tu cita y confirma:', 600);
+  logAudit(auditLog.value, 'SELECT_SLOT', 'HOLD_STARTED', `Slot: ${slot.local_start}`);
+
+  // Start 5-minute hold timer
+  holdSeconds.value = 300;
+  clearInterval(holdTimerInterval.value);
+  holdTimerInterval.value = setInterval(() => {
+    holdSeconds.value--;
+    if (holdSeconds.value <= 0) {
+      clearInterval(holdTimerInterval.value);
+      logAudit(auditLog.value, 'CONFIRMATION', 'HOLD_EXPIRED');
+      addMessage('assistant', '⏰ <strong>El tiempo de reserva ha expirado.</strong> El horario puede haber sido tomado por otro paciente. Selecciona un nuevo horario.');
+      transitionTo('SELECT_DATE');
+      selectedDate.value = '';
+    }
+  }, 1000) as unknown as number;
+
+  simulateTyping(`Revisa los datos de tu cita y confirma:
+    <div style="background: #FEF3C7; border-radius: 6px; padding: 6px 10px; margin-top: 6px; font-size: 0.78rem; color: #92400E;">
+      ⏱️ Horario reservado temporalmente — tienes <strong>5 minutos</strong> para confirmar.
+    </div>`, 600);
 }
 
 async function confirmBooking() {
+  clearHoldTimer();
   submitting.value = true;
   const csrfMeta = document.querySelector('meta[name="csrf-token"]');
   const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
@@ -501,13 +540,29 @@ async function confirmBooking() {
       demoMessage.value = generateDemoMessage(agentCtx);
       logAudit(auditLog.value, 'DEMO_PREVIEW', 'DEMO_MSG_GENERATED', 'Mensaje de demostración generado (no enviado)');
 
+      // Pre-visit checklist
       setTimeout(() => {
-        addMessage('assistant', `📧 <strong>Vista previa del mensaje de confirmación generada.</strong>
+        addMessage('assistant', `📋 <strong>Checklist pre-visita:</strong>
+          <div style="background: #F0F9FF; border: 1px solid #93C5FD; border-radius: 8px; padding: 12px; margin-top: 6px; font-size: 0.82rem;">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div>☐ Completar formulario pre-consulta</div>
+              <div>☐ Tener a mano documentos de identidad y seguro</div>
+              <div>☐ Preparar lista de medicamentos actuales</div>
+              <div>☐ Verificar cámara y micrófono (10 min antes)</div>
+              <div>☐ Buscar un lugar tranquilo con buena conexión</div>
+              <div>☐ Tener sus estudios o resultados previos disponibles</div>
+            </div>
+          </div>`);
+      }, 1200);
+
+      // Demo message button + nav
+      setTimeout(() => {
+        addMessage('assistant', `📧 <strong>Vista previa del mensaje de confirmación:</strong>
           <br><button onclick="document.dispatchEvent(new CustomEvent('show-demo-modal'))" style="background: #0E5D52; color: #FFF; border: none; border-radius: 8px; padding: 8px 16px; margin-top: 8px; cursor: pointer; font-weight: 600; font-size: 0.85rem;">
             📨 Ver mensaje de demostración
           </button>
           <br><br>📌 Puedes ver tus citas en <strong>"Mis Citas"</strong> en el menú lateral.<br>¿Necesitas algo más?`);
-      }, 1500);
+      }, 2500);
     } else if (res.status === 409) {
       addMessage('assistant', '⚠️ Ese horario acaba de ser ocupado por otro paciente.');
       transitionTo('SELECT_DATE');
@@ -525,6 +580,7 @@ async function confirmBooking() {
 }
 
 function cancelBooking() {
+  clearHoldTimer();
   addMessage('user', 'Cancelar');
   logAudit(auditLog.value, 'CONFIRMATION', 'CANCELLED');
   restartFlow();
@@ -689,6 +745,18 @@ watch(messages, () => scrollToBottom(), { deep: true });
 .confirm-card { background: #FFF; border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px; }
 .confirm-row { padding: 4px 0; font-size: 0.85rem; color: #374151; border-bottom: 1px solid #F3F4F6; }
 .confirm-row:last-of-type { border-bottom: none; }
+.hold-timer {
+  padding: 8px 10px; margin-top: 8px; border-radius: 6px;
+  background: #FEF3C7; color: #92400E; font-size: 0.82rem; text-align: center;
+  transition: all 0.3s;
+}
+.hold-timer--warning {
+  background: #FEE2E2; color: #991B1B; animation: hold-pulse 1s infinite;
+}
+@keyframes hold-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
 .confirm-actions { display: flex; gap: 8px; margin-top: 12px; }
 .confirm-btn { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
 .confirm-btn--yes { background: var(--color-primary, #0E5D52); color: #FFF; }
