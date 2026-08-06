@@ -198,3 +198,17 @@ And los pacientes ven la nueva disponibilidad
 - Datos mock en Mis Citas → props reales de Inertia
 - Error 403 por getRoleAttribute → pgsql_admin + cache
 
+### RF-AGENTE-SM: Agente Inteligente sin LLM (v0.5.0)
+- State machine con 19 estados declarativos
+- Emergency check obligatorio con keywords de emergencia (911)
+- Captura estructurada: motivo, inicio síntomas, severidad, duración, alergias, medicación
+- Triage por reglas: emergencia → presencial → escalado → teleconsulta
+- Preferencia de horario: mañana/tarde/noche
+- Scoring de slots: preferencia (+30), urgencia/proximidad (+20), matutino (+10)
+- Hold temporal de 5 minutos con countdown visual
+- Checklist pre-visita automática
+- Modal de demo message con Copiar/Descargar/Enviar (demo)
+- Escalado a agente humano
+- Audit logging completo
+
+

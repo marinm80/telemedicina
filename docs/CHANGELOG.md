@@ -5,6 +5,35 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-06 - Agente Inteligente sin LLM (3 Fases)
+
+### Añadido
+
+**Fase 1 — State Machine + Emergency Detection + Demo Preview:**
+- `frontend/src/lib/agentStateMachine.ts`: Motor de estados declarativo con 19 estados. Incluye detección de emergencia por keywords (dolor torácico, dificultad respirar, etc.), validaciones por estado, transiciones basadas en reglas, y audit logging con timestamp.
+- `frontend/src/lib/agentDemoMessage.ts`: Generador de mensajes de confirmación de cita para modo demo/portafolio. Genera email preview con datos clínicos, instrucciones pre-visita, y enlace de teleconsulta simulado.
+- `frontend/src/components/FloatingAssistant.vue`: Reescritura completa con state machine. Emergency check obligatorio antes de agendar. Estado EMERGENCY_STOP terminal con instrucciones 911. Modal de vista previa del email con botones Copiar/Descargar .txt/Enviar (demo). Botón reiniciar y escalado humano.
+
+**Fase 2 — Triage Rules Engine + Slot Scoring:**
+- `frontend/src/lib/agentTriageRules.ts`: Motor de reglas clínicas declarativas. 6 reglas priorizadas: EMRG-001 (emergency keywords), PRES-001/002/003 (presencial por severidad), ESCL-001 (escalado por alergias), TELE-DEFAULT. Cada regla retorna resultado, razón, y ID de regla para auditoría.
+- `frontend/src/lib/agentSlotScoring.ts`: Sistema de scoring de horarios. Factores: preferencia horaria (+30), proximidad urgencia (+20), bonus matutino (+10). Genera top 3 recomendaciones con medallas (🥇🥈🥉) y razones.
+- Nuevo estado TIME_PREFERENCE: permite al paciente indicar preferencia de mañana/tarde/noche antes de buscar slots.
+
+**Fase 3 — Hold Temporal + Checklist Pre-visita:**
+- Hold temporal de 5 minutos al seleccionar slot. Timer visual MM:SS con animación pulsante cuando queda < 1 minuto.
+- Checklist pre-visita automática tras confirmar: formulario, documentos, medicamentos, cámara/mic, lugar tranquilo.
+- Escalado humano: link permanente en footer + estado dedicado ESCALATE_HUMAN.
+
+### Cambiado
+- `FloatingAssistant.vue`: De 858 líneas con lógica ad-hoc a ~860 líneas con state machine + imports modulares.
+- `agentStateMachine.ts`: TRIAGE_DECISION delegado al motor de reglas real (evaluateTriage) en vez de if/else básico.
+
+### Notas Técnicas
+- Todo el triage, scoring y detección de emergencia funciona sin LLM — puro pattern matching + reglas declarativas.
+- El audit log registra: transiciones, inputs del usuario, opciones rápidas seleccionadas, resultados de triage, holds, y cancelaciones.
+- El modal de demo message incluye: asunto, destinatarios simulados, cuerpo HTML con datos clínicos, botones Copiar/Descargar.
+- El hold timer usa setInterval con cleanup en confirm/cancel/restart.
+
 ## [0.4.0] - 2026-08-06 - Reestructuración: Consultas, Recetas, Paginación
 
 ### Añadido
