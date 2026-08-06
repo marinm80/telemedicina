@@ -389,9 +389,23 @@ function handleQuickOption(opt: QuickOption) {
   addMessage('user', opt.label);
   logAudit(auditLog.value, currentStateId.value, 'QUICK_OPTION', opt.value);
 
+  const prevState = currentStateId.value;
   const state = stateMachine[currentStateId.value];
   const nextState = state.next(opt.value, agentCtx);
   transitionTo(nextState);
+
+  // Show clinic address when presencial is selected
+  if (prevState === 'SELECT_MODALITY' && opt.value === 'presencial') {
+    setTimeout(() => {
+      addMessage('assistant', `📍 <strong>Dirección de la clínica:</strong>
+        <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 12px; margin-top: 6px; font-size: 0.85rem;">
+          <div>🏢 <strong>Av. Los Próceres 1240, Torre Médica Salvia, piso 4</strong></div>
+          <div style="color: #065F46; margin-top: 4px;">📌 Tegucigalpa · Frente al Parque La Concordia</div>
+          <div style="color: #065F46; margin-top: 4px;">🅿️ Parqueo gratis las primeras 2h con validación</div>
+          <div style="color: #065F46; margin-top: 4px;">🕐 Lun a Vie 7:00–19:00 · Sáb 8:00–14:00</div>
+        </div>`);
+    }, 600);
+  }
 }
 
 // ── Booking step handlers (same as before but using state machine) ──
@@ -532,9 +546,21 @@ async function confirmBooking() {
       demoMessage.value = generateDemoMessage(agentCtx);
       logAudit(auditLog.value, 'DEMO_PREVIEW', 'DEMO_MSG_GENERATED', 'Mensaje de demostración generado (no enviado)');
 
-      // Pre-visit checklist
+      // Pre-visit checklist (adapts to modality)
       setTimeout(() => {
-        addMessage('assistant', `📋 <strong>Checklist pre-visita:</strong>
+        const isPresencial = agentCtx.modality === 'presencial';
+        const checklistHtml = isPresencial
+          ? `📋 <strong>Checklist pre-visita (presencial):</strong>
+          <div style="background: #F0F9FF; border: 1px solid #93C5FD; border-radius: 8px; padding: 12px; margin-top: 6px; font-size: 0.82rem;">
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div>☐ Llevar documentos de identidad y seguro médico</div>
+              <div>☐ Preparar lista de medicamentos actuales</div>
+              <div>☐ Llevar estudios o resultados previos</div>
+              <div>☐ Llegar 15 minutos antes de la cita</div>
+              <div>☐ Validar parqueo en recepción (2h gratis)</div>
+            </div>
+          </div>`
+          : `📋 <strong>Checklist pre-visita (teleconsulta):</strong>
           <div style="background: #F0F9FF; border: 1px solid #93C5FD; border-radius: 8px; padding: 12px; margin-top: 6px; font-size: 0.82rem;">
             <div style="display: flex; flex-direction: column; gap: 6px;">
               <div>☐ Completar formulario pre-consulta</div>
@@ -544,8 +570,25 @@ async function confirmBooking() {
               <div>☐ Buscar un lugar tranquilo con buena conexión</div>
               <div>☐ Tener sus estudios o resultados previos disponibles</div>
             </div>
-          </div>`);
+          </div>`;
+        addMessage('assistant', checklistHtml);
       }, 1200);
+
+      // Address reminder for presencial
+      if (agentCtx.modality === 'presencial') {
+        setTimeout(() => {
+          addMessage('assistant', `📍 <strong>Recuerda la dirección y horario de tu cita:</strong>
+            <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 10px; padding: 14px; margin-top: 6px; font-size: 0.85rem;">
+              <div>🏢 <strong>Av. Los Próceres 1240, Torre Médica Salvia, piso 4</strong></div>
+              <div style="margin-top: 4px;">📌 Tegucigalpa · Frente al Parque La Concordia</div>
+              <div style="margin-top: 4px;">📅 <strong>${dateFormatted}</strong></div>
+              <div style="margin-top: 4px;">🕐 <strong>${agentCtx.bookingData.slotLocalTime}</strong></div>
+              <div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed #A7F3D0; color: #065F46;">
+                💡 Llega 15 minutos antes · Parqueo gratis 2h con validación
+              </div>
+            </div>`);
+        }, 2000);
+      }
 
       // Demo message button + nav
       setTimeout(() => {
@@ -554,7 +597,7 @@ async function confirmBooking() {
             📨 Ver mensaje de demostración
           </button>
           <br><br>📌 Puedes ver tus citas en <strong>"Mis Citas"</strong> en el menú lateral.<br>¿Necesitas algo más?`);
-      }, 2500);
+      }, agentCtx.modality === 'presencial' ? 3500 : 2500);
     } else if (res.status === 409) {
       addMessage('assistant', '⚠️ Ese horario acaba de ser ocupado por otro paciente.');
       transitionTo('SELECT_DATE');
