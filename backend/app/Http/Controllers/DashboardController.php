@@ -33,39 +33,43 @@ final class DashboardController extends Controller
 
     private function adminDashboard(): Response
     {
+        $db = DB::connection('pgsql_admin');
+
         $data = [
             'total_users'                => 0,
             'pending_doctor_approvals'   => 0,
             'monthly_appointments_count' => 0,
-            'total_revenue'              => 0.0,
+            'cancelled_count'            => 0,
+            'completed_count'            => 0,
+            'pending_appointments_count' => 0,
             'pending_doctors'            => [],
             'chart_appointments_by_day'  => [],
             'recent_activity'            => [],
+            'recent_cancelled'           => [],
         ];
 
         try {
-            $data['total_users'] = DB::table('users')->count();
-            $data['pending_doctor_approvals'] = DB::table('doctor_profiles')->where('status', 'pending')->count();
-            $data['monthly_appointments_count'] = DB::table('appointments')->where('created_at', '>=', now()->startOfMonth())->count();
-            $data['total_revenue'] = (float) DB::table('payments')->where('status', 'completed')->sum('amount');
+            $data['total_users'] = $db->table('users')->count();
+            $data['pending_doctor_approvals'] = $db->table('doctor_profiles')->where('status', 'pending')->count();
+            $data['monthly_appointments_count'] = $db->table('appointments')->where('created_at', '>=', now()->startOfMonth())->count();
+            $data['cancelled_count'] = $db->table('appointments')->where('status', 'cancelled')->where('created_at', '>=', now()->startOfMonth())->count();
+            $data['completed_count'] = $db->table('appointments')->where('status', 'completed')->where('created_at', '>=', now()->startOfMonth())->count();
+            $data['pending_appointments_count'] = $db->table('appointments')->whereIn('status', ['pending', 'confirmed'])->count();
 
-            $data['pending_doctors'] = DB::table('doctor_profiles')
+            $data['pending_doctors'] = $db->table('doctor_profiles')
                 ->join('users', 'doctor_profiles.user_id', '=', 'users.id')
-                ->leftJoin('specialties', 'doctor_profiles.specialty_id', '=', 'specialties.id')
                 ->where('doctor_profiles.status', 'pending')
                 ->select([
                     'users.id',
                     'users.name',
                     'users.last_name',
-                    'doctor_profiles.specialty_id',
-                    'specialties.name as specialty_name',
                     'doctor_profiles.license_number',
                     'doctor_profiles.status',
                     'doctor_profiles.created_at'
                 ])
                 ->get();
 
-            $chartData = DB::table('appointments')
+            $chartData = $db->table('appointments')
                 ->select(DB::raw("date_trunc('day', lower(franja)) as day"), DB::raw("count(*) as count"))
                 ->whereRaw("lower(franja) >= now() - interval '7 days'")
                 ->groupBy('day')
@@ -78,6 +82,54 @@ final class DashboardController extends Controller
                     'count' => $item->count,
                 ];
             });
+
+            // Recent cancelled appointments (last 30 days)
+            $data['recent_cancelled'] = $db->table('appointments as a')
+                ->join('users as u_pat', 'u_pat.id', '=', 'a.patient_id')
+                ->join('users as u_doc', 'u_doc.id', '=', 'a.doctor_id')
+                ->where('a.status', 'cancelled')
+                ->where('a.updated_at', '>=', now()->subDays(30))
+                ->select([
+                    'a.id',
+                    DB::raw("u_pat.name || ' ' || u_pat.last_name AS patient_name"),
+                    DB::raw("u_doc.name || ' ' || u_doc.last_name AS doctor_name"),
+                    DB::raw("lower(a.franja) AS franja_start"),
+                    'a.cancellation_reason',
+                    'a.cancelled_by',
+                    'a.patient_id',
+                    'a.doctor_id',
+                    'a.updated_at',
+                ])
+                ->orderBy('a.updated_at', 'desc')
+                ->limit(20)
+                ->get()
+                ->map(function ($c) {
+                    $who = 'Sistema';
+                    if ($c->cancelled_by === $c->patient_id) $who = 'Paciente';
+                    elseif ($c->cancelled_by === $c->doctor_id) $who = 'Médico';
+                    return [
+                        'id' => $c->id,
+                        'patient_name' => $c->patient_name,
+                        'doctor_name' => $c->doctor_name,
+                        'franja_start' => $c->franja_start,
+                        'reason' => $c->cancellation_reason,
+                        'cancelled_by_label' => $who,
+                        'updated_at' => $c->updated_at,
+                    ];
+                });
+
+            // Recent activity from actual data
+            $data['recent_activity'] = $db->table('appointments')
+                ->where('created_at', '>=', now()->subDays(7))
+                ->orderBy('created_at', 'desc')
+                ->limit(5)
+                ->get()
+                ->map(function ($a) {
+                    return [
+                        'text' => "Cita {$a->status} creada",
+                        'time' => \Carbon\Carbon::parse($a->created_at)->diffForHumans(),
+                    ];
+                });
 
         } catch (Throwable $e) {
             // Ignorar errores de tablas faltantes
