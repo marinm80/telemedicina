@@ -70,17 +70,47 @@ async function startConsultation(appt: typeof props.appointments[0]) {
   }
 }
 
-type FilterTab = 'todas' | 'proximas' | 'pasadas';
+type FilterTab = 'todas' | 'proximas' | 'completadas' | 'canceladas';
 const activeTab = ref<FilterTab>('todas');
 
+const tabCounts = computed(() => {
+  const a = props.appointments;
+  return {
+    todas: a.length,
+    proximas: a.filter(x => x.status === 'pending' || x.status === 'confirmed').length,
+    completadas: a.filter(x => x.status === 'completed').length,
+    canceladas: a.filter(x => x.status === 'cancelled').length,
+  };
+});
+
+// Patient filter (admin/doctor only)
+const selectedPatient = ref('');
+const uniquePatients = computed(() => {
+  const map = new Map<string, string>();
+  props.appointments.forEach(a => {
+    if (!map.has(a.patient_id)) map.set(a.patient_id, a.patient_name);
+  });
+  return Array.from(map.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+});
+
 const filteredAppointments = computed(() => {
+  let result = [...props.appointments];
+
+  // Apply patient filter for admin/doctor
+  if (selectedPatient.value && isDoctor.value) {
+    result = result.filter(a => a.patient_id === selectedPatient.value);
+  }
+
+  // Apply tab filter
   if (activeTab.value === 'proximas') {
-    return props.appointments.filter((a) => a.status === 'pending' || a.status === 'confirmed');
+    result = result.filter((a) => a.status === 'pending' || a.status === 'confirmed');
+  } else if (activeTab.value === 'completadas') {
+    result = result.filter((a) => a.status === 'completed');
+  } else if (activeTab.value === 'canceladas') {
+    result = result.filter((a) => a.status === 'cancelled');
   }
-  if (activeTab.value === 'pasadas') {
-    return props.appointments.filter((a) => a.status === 'completed' || a.status === 'cancelled');
-  }
-  return props.appointments;
+
+  return result;
 });
 
 function formatDate(iso: string): string {
@@ -102,10 +132,11 @@ function formatTime(iso: string): string {
   });
 }
 
-const TABS: { id: FilterTab; label: string }[] = [
-  { id: 'todas', label: 'Todas' },
-  { id: 'proximas', label: 'PrÃ³ximas' },
-  { id: 'pasadas', label: 'Pasadas' },
+const TABS: { id: FilterTab; label: string; icon: string }[] = [
+  { id: 'todas', label: 'Todas', icon: 'pi-list' },
+  { id: 'proximas', label: 'Próximas', icon: 'pi-clock' },
+  { id: 'completadas', label: 'Completadas', icon: 'pi-check-circle' },
+  { id: 'canceladas', label: 'Canceladas', icon: 'pi-times-circle' },
 ];
 
 function statusBorderColor(status: string): string {
@@ -351,8 +382,22 @@ async function downloadPdf(consultationId: string) {
         :class="['appointments__tab', { 'appointments__tab--active': activeTab === tab.id }]"
         @click="activeTab = tab.id"
       >
+        <i :class="['pi', tab.icon]" aria-hidden="true" style="font-size: 0.78rem;" />
         {{ tab.label }}
+        <span v-if="tabCounts[tab.id] > 0" class="tab-count">{{ tabCounts[tab.id] }}</span>
       </button>
+    </div>
+
+    <!-- Patient filter (admin/doctor only) -->
+    <div v-if="isDoctor && uniquePatients.length > 1" class="patient-filter">
+      <i class="pi pi-filter" aria-hidden="true"></i>
+      <select v-model="selectedPatient" class="patient-filter__select">
+        <option value="">Todos los pacientes ({{ uniquePatients.length }})</option>
+        <option v-for="p in uniquePatients" :key="p.id" :value="p.id">{{ p.name }}</option>
+      </select>
+      <span v-if="selectedPatient" class="patient-filter__clear" @click="selectedPatient = ''">
+        <i class="pi pi-times"></i> Limpiar filtro
+      </span>
     </div>
 
     <!-- Estado: vacÃ­o -->
@@ -433,6 +478,15 @@ async function downloadPdf(consultationId: string) {
             <i class="pi pi-file-pdf" aria-hidden="true" />
             Descargar PDF
           </button>
+          <!-- Cancellation info -->
+          <div v-if="appt.status === 'cancelled' && appt.cancellation_reason" class="appt-card__cancel-info">
+            <i class="pi pi-info-circle" aria-hidden="true" />
+            <span><strong>Motivo:</strong> {{ appt.cancellation_reason }}</span>
+          </div>
+          <div v-if="appt.status === 'cancelled' && appt.cancelled_by" class="appt-card__cancel-info appt-card__cancel-info--who">
+            <i class="pi pi-user" aria-hidden="true" />
+            <span>Cancelado por: {{ appt.cancelled_by === appt.patient_id ? 'Paciente' : appt.cancelled_by === appt.doctor_id ? 'Médico' : 'Administrador' }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -629,6 +683,77 @@ async function downloadPdf(consultationId: string) {
 .appointments__tab:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
+}
+
+.appointments__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: rgba(0,0,0,0.08);
+}
+
+.appointments__tab--active .tab-count {
+  background: rgba(255,255,255,0.25);
+}
+
+.patient-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--spacing-3);
+  padding: 8px 14px;
+  background: var(--color-surface-0);
+  border: 1px solid var(--color-surface-200);
+  border-radius: var(--radius-lg);
+}
+.patient-filter > i { color: var(--color-text-muted); font-size: 0.85rem; }
+.patient-filter__select {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 0.9rem;
+  background: transparent;
+  font-family: var(--font-body);
+  color: var(--color-text-primary);
+}
+.patient-filter__clear {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--color-error-600);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.patient-filter__clear:hover { text-decoration: underline; }
+
+.appt-card__cancel-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--color-error-700);
+  background: var(--color-error-50, #FEF2F2);
+  padding: 4px 10px;
+  border-radius: 6px;
+  width: fit-content;
+}
+.appt-card__cancel-info--who {
+  color: var(--color-text-muted);
+  background: var(--color-surface-100);
 }
 
 .appointments__list {
