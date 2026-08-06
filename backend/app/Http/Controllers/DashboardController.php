@@ -34,6 +34,12 @@ final class DashboardController extends Controller
     private function adminDashboard(): Response
     {
         $db = DB::connection('pgsql_admin');
+        $request = request();
+
+        $search = trim((string) $request->input('search', ''));
+        $statusFilter = $request->input('status_filter', '');
+        $page = max(1, (int) $request->input('page', 1));
+        $perPage = 10;
 
         $data = [
             'total_users'                => 0,
@@ -45,7 +51,17 @@ final class DashboardController extends Controller
             'pending_doctors'            => [],
             'chart_appointments_by_day'  => [],
             'recent_activity'            => [],
-            'recent_cancelled'           => [],
+            // Paginated appointments
+            'all_appointments'           => [],
+            'appointments_total'         => 0,
+            'appointments_page'          => $page,
+            'appointments_per_page'      => $perPage,
+            'appointments_last_page'     => 1,
+            // Filters echo
+            'filters' => [
+                'search' => $search,
+                'status_filter' => $statusFilter,
+            ],
         ];
 
         try {
@@ -83,40 +99,70 @@ final class DashboardController extends Controller
                 ];
             });
 
-            // Recent cancelled appointments (last 30 days)
-            $data['recent_cancelled'] = $db->table('appointments as a')
+            // ── Paginated appointments with search ──
+            $apptQuery = $db->table('appointments as a')
                 ->join('users as u_pat', 'u_pat.id', '=', 'a.patient_id')
                 ->join('users as u_doc', 'u_doc.id', '=', 'a.doctor_id')
-                ->where('a.status', 'cancelled')
-                ->where('a.updated_at', '>=', now()->subDays(30))
                 ->select([
                     'a.id',
                     DB::raw("u_pat.name || ' ' || u_pat.last_name AS patient_name"),
                     DB::raw("u_doc.name || ' ' || u_doc.last_name AS doctor_name"),
                     DB::raw("lower(a.franja) AS franja_start"),
+                    DB::raw("upper(a.franja) AS franja_end"),
+                    'a.status',
                     'a.cancellation_reason',
                     'a.cancelled_by',
                     'a.patient_id',
                     'a.doctor_id',
+                    'a.created_at',
                     'a.updated_at',
-                ])
-                ->orderBy('a.updated_at', 'desc')
-                ->limit(20)
+                ]);
+
+            // Search filter
+            if ($search !== '') {
+                $like = '%' . mb_strtolower($search) . '%';
+                $apptQuery->where(function ($q) use ($like) {
+                    $q->whereRaw("lower(u_pat.name || ' ' || u_pat.last_name) LIKE ?", [$like])
+                      ->orWhereRaw("lower(u_doc.name || ' ' || u_doc.last_name) LIKE ?", [$like]);
+                });
+            }
+
+            // Status filter
+            if ($statusFilter !== '' && in_array($statusFilter, ['pending', 'confirmed', 'completed', 'cancelled'])) {
+                $apptQuery->where('a.status', $statusFilter);
+            }
+
+            // Count total
+            $total = (clone $apptQuery)->count();
+            $data['appointments_total'] = $total;
+            $data['appointments_last_page'] = max(1, (int) ceil($total / $perPage));
+
+            // Paginate
+            $rows = $apptQuery->orderByRaw("lower(a.franja) DESC")
+                ->offset(($page - 1) * $perPage)
+                ->limit($perPage)
                 ->get()
                 ->map(function ($c) {
-                    $who = 'Sistema';
-                    if ($c->cancelled_by === $c->patient_id) $who = 'Paciente';
-                    elseif ($c->cancelled_by === $c->doctor_id) $who = 'Médico';
+                    $who = null;
+                    if ($c->status === 'cancelled') {
+                        $who = 'Sistema';
+                        if ($c->cancelled_by === $c->patient_id) $who = 'Paciente';
+                        elseif ($c->cancelled_by === $c->doctor_id) $who = 'Médico';
+                    }
                     return [
                         'id' => $c->id,
                         'patient_name' => $c->patient_name,
                         'doctor_name' => $c->doctor_name,
                         'franja_start' => $c->franja_start,
+                        'franja_end' => $c->franja_end,
+                        'status' => $c->status,
                         'reason' => $c->cancellation_reason,
                         'cancelled_by_label' => $who,
-                        'updated_at' => $c->updated_at,
+                        'created_at' => $c->created_at,
                     ];
                 });
+
+            $data['all_appointments'] = $rows;
 
             // Recent activity from actual data
             $data['recent_activity'] = $db->table('appointments')
@@ -125,8 +171,15 @@ final class DashboardController extends Controller
                 ->limit(5)
                 ->get()
                 ->map(function ($a) {
+                    $label = match($a->status) {
+                        'pending' => 'Cita pendiente agendada',
+                        'confirmed' => 'Cita confirmada',
+                        'completed' => 'Cita completada',
+                        'cancelled' => 'Cita cancelada',
+                        default => 'Cita registrada',
+                    };
                     return [
-                        'text' => "Cita {$a->status} creada",
+                        'text' => $label,
                         'time' => \Carbon\Carbon::parse($a->created_at)->diffForHumans(),
                     ];
                 });
