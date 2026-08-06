@@ -228,7 +228,11 @@ const recentActivityItems = computed(() => props.recent_activity.length > 0 ? pr
 
 function formatDate(iso: string) {
   if (!iso) return '';
-  try { return new Date(iso).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return iso; }
+  try {
+    return new Date(iso).toLocaleDateString('es-ES', {
+      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
+    });
+  } catch { return iso; }
 }
 function formatTime(iso: string) {
   if (!iso) return '';

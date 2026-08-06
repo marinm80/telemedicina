@@ -94,7 +94,7 @@ final class DashboardController extends Controller
 
             $data['chart_appointments_by_day'] = $chartData->map(function ($item) {
                 return [
-                    'day' => \Carbon\Carbon::parse($item->day)->format('D'),
+                    'day' => \Carbon\Carbon::parse($item->day)->locale('es')->isoFormat('ddd D/MM'),
                     'count' => $item->count,
                 ];
             });
@@ -252,7 +252,7 @@ final class DashboardController extends Controller
 
             $data['chart_consultations_by_day'] = $chartData->map(function ($item) {
                 return [
-                    'day' => \Carbon\Carbon::parse($item->day)->format('D'),
+                    'day' => \Carbon\Carbon::parse($item->day)->locale('es')->isoFormat('ddd D/MM'),
                     'count' => $item->count,
                 ];
             });
