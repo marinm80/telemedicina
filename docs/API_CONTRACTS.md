@@ -652,3 +652,63 @@ En la arquitectura Inertia.js + Vue 3, las `props` pasadas desde los controlador
   }
   ```
 
+---
+
+## Endpoints Añadidos v0.4.0
+
+### Consultas Médicas
+
+```
+POST   /api/consultations/{appointmentId}/start
+  → Crea registro de consulta. Requiere: doctor o admin.
+  → Response: { consultation_id: string }
+  → 201 Created | 200 si ya existe | 403 | 404
+
+POST   /api/consultations/{id}/form
+  → Guarda borrador de formulario de consulta.
+  → Body: { motivo_consulta, sintomas, historial_medico, medicinas_actuales[], examen_fisico, diagnostico, plan_tratamiento }
+  → 200 OK
+
+GET    /api/consultations/{id}/form
+  → Obtiene datos del formulario.
+  → Response: { data: { motivo_consulta, sintomas, ..., status } }
+
+POST   /api/consultations/{id}/archive
+  → Firma, archiva consulta, completa cita. Opcionalmente agenda seguimiento.
+  → Body: mismos campos de form + follow_up: { enabled: boolean, weeks: number }
+  → 200 OK
+```
+
+### Recetas Médicas
+
+```
+GET    /api/prescriptions
+  → Lista recetas según rol.
+  → Doctor: todas (edita propias), Paciente: propias, Admin: todas.
+
+POST   /api/prescriptions
+  → Crea receta. Solo doctor o admin.
+  → Body: { consultation_id?, patient_id, medicamentos: [{nombre, dosis, frecuencia, duracion}], indicaciones?, notas? }
+  → 201 Created
+
+PUT    /api/prescriptions/{id}
+  → Actualiza receta. Solo doctor creador o admin.
+
+DELETE /api/prescriptions/{id}
+  → Soft delete. Solo doctor creador o admin.
+```
+
+### Horarios del Médico
+
+```
+GET    /api/doctor/schedules
+  → Lista horarios del médico autenticado.
+
+POST   /api/doctor/schedules
+  → Crea franja horaria. Body: { day_of_week, start_time, end_time, slot_duration? }
+
+DELETE /api/doctor/schedules/{id}
+  → Elimina franja horaria.
+```
+
+

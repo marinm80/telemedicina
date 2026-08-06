@@ -5,6 +5,70 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-06 - Reestructuración: Consultas, Recetas, Paginación
+
+### Añadido
+
+**Flujo de Consulta Médica:**
+- `frontend/src/Pages/Doctor/ConsultationView.vue`: Formulario médico completo con 10 secciones (motivo, síntomas, historial, medicinas actuales, examen físico, resultados lab, diagnóstico, plan de tratamiento, seguimiento con cita automática).
+- `backend/app/Http/Controllers/Api/ConsultationFormController.php`: Endpoints para guardar borrador (`POST /api/consultations/{id}/form`), archivar consulta (`POST /api/consultations/{id}/archive`), y obtener datos (`GET /api/consultations/{id}/form`).
+- Botón 'Atender' en Mis Citas para médicos — crea consulta y navega a la vista de consulta.
+- Endpoint `POST /api/consultations/{id}/start` para crear registro de consulta.
+
+**Módulo de Recetas (Prescriptions):**
+- Tabla `prescriptions` con campos JSONB para medicamentos, RLS, indexes.
+- `backend/app/Http/Controllers/Api/PrescriptionController.php`: CRUD (index, store, update, destroy) con permisos por rol.
+- Rutas API: `GET/POST/PUT/DELETE /api/prescriptions`.
+
+**Panel de Control Admin:**
+- `frontend/src/Pages/Admin/AdminPanel.vue`: Panel unificado con 3 tabs (Médicos, Usuarios, Configuración).
+- Gestión de fichas de médicos con modal de edición.
+- Configuración de horarios por médico (Lun-Dom).
+
+**Directorio Médicos (Paciente):**
+- `frontend/src/Pages/Patient/DoctorDirectory.vue`: Vista read-only con cards, búsqueda y filtro por especialidad.
+
+**Horarios del Médico:**
+- `frontend/src/Pages/Doctor/MisHorarios.vue`: Grilla semanal (Lun-Dom) para configurar franjas horarias.
+- `backend/app/Http/Controllers/Api/DoctorScheduleController.php`: API CRUD para schedules.
+
+**Historial de Citas:**
+- 4 tabs en Mis Citas: Todas, Próximas, Completadas, Canceladas (con contadores).
+- Filtro por paciente (dropdown, solo admin/médico).
+- Información de cancelación visible: motivo y quién canceló.
+
+**Dashboard Admin Paginado:**
+- Tabla 'Todas las Citas' con paginación server-side (10/página).
+- Buscador por nombre de médico o paciente (LIKE case-insensitive).
+- Filtro por estado (Pendiente/Confirmada/Completada/Cancelada).
+- Card 'Cancelaciones del mes' con dato real.
+- Sidebar con resumen: pendientes, completadas, canceladas, tasa de cancelación.
+
+**Validación Anti-solapamiento:**
+- `backend/app/Actions/Appointments/BookAppointmentAction.php`: Validación `franja && tstzrange()` antes del INSERT para pacientes.
+- `backend/app/Exceptions/PatientSlotCollisionException.php`: Nueva excepción → HTTP 409.
+
+**Sidebar Dinámico:**
+- `frontend/src/components/app/AppSidebar.vue`: Menú por rol (Admin: Resumen/Panel/Citas, Paciente: Directorio/Citas, Médico: Citas/Horarios).
+- Badges reactivos con datos reales de Inertia shared props.
+
+### Corregido
+- `MyAppointments.vue`: Removidos datos mock, usa `defineProps` con datos reales de Inertia.
+- `User.php`: `getRoleAttribute()` usa `pgsql_admin` con cache estático para evitar error 403.
+- `HandleInertiaRequests.php`: Badges dinámicos `pendingDoctors` + `pendingAppointments` (antes hardcodeado '3').
+- `AppointmentController.php`: Fix de citas duplicadas por LEFT JOIN multi-specialty — reemplazado por `leftJoinSub` con `string_agg()`.
+- `AdminDashboard.vue`: Removidos datos fake ('Ingresos US$0', 'Asistente Salvia 312 conversaciones').
+
+### Cambiado
+- `DashboardController.php`: Usa `pgsql_admin` para bypass RLS. Soporta paginación (`page`), búsqueda (`search`), y filtro de estado (`status_filter`).
+- Actividad reciente muestra datos reales con labels descriptivos por estado.
+
+### Notas Técnicas
+- Migración `2026_08_06_000001_create_prescriptions_table.php` ejecutada.
+- Todas las consultas admin usan `DB::connection('pgsql_admin')` para bypass RLS.
+- La tabla de citas del dashboard usa paginación server-side con preserveState/preserveScroll.
+- El constraint GIST `appointments_sin_solapamiento` previene solapamiento a nivel de BD.
+
 ## [0.3.0] - 2026-08-05 - Rediseño Visual Salvia + Dashboards por Rol
 
 ### Añadido

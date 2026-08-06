@@ -160,3 +160,41 @@ And los pacientes ven la nueva disponibilidad
 
 ## Preguntas abiertas (TBD)
 - Ninguna — todas las asunciones fueron aceptadas
+
+---
+
+## Cambios Implementados v0.4.0 (2026-08-06)
+
+### RF-CONSULTA: Flujo de Consulta Médica
+- Médico puede iniciar consulta desde 'Mis Citas' con botón 'Atender'
+- Formulario con 10 secciones: motivo, síntomas, historial, medicinas, examen, lab, diagnóstico, plan, seguimiento
+- Guardar borrador sin cerrar + Firmar y Archivar (cambia estado a completed)
+- Cita de seguimiento automática al archivar (configurable en semanas/meses)
+
+### RF-RECETAS: Módulo de Recetas Médicas
+- Tabla `prescriptions` con JSONB para medicamentos
+- CRUD con permisos: doctor edita propias, admin edita todas, paciente solo lectura
+- Integrado con consultas vía `consultation_id`
+
+### RF-HIST: Historial de Citas
+- 4 tabs: Todas, Próximas, Completadas, Canceladas (con contadores)
+- Filtro por paciente individual (admin/médico)
+- Info de cancelación: motivo + quién canceló
+
+### RF-DASH-ADMIN: Dashboard Admin Renovado
+- Tabla paginada de todas las citas (10/página)
+- Buscador por médico o paciente
+- Filtro por estado
+- Métricas reales: cancelaciones, completadas, tasa
+- Removidos datos fake (ingresos, asistente)
+
+### RF-SOLAPAMIENTO: Validación Anti-solapamiento Paciente
+- Validación `franja && tstzrange()` en BookAppointmentAction
+- Error 409 con mensaje descriptivo
+
+### BUG-FIXES
+- Citas duplicadas por LEFT JOIN multi-specialty → string_agg()
+- Badge estático '3' → datos dinámicos reales
+- Datos mock en Mis Citas → props reales de Inertia
+- Error 403 por getRoleAttribute → pgsql_admin + cache
+

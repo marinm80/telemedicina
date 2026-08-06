@@ -1159,3 +1159,42 @@ CREATE TRIGGER trg_audit_reschedule_requests AFTER INSERT OR UPDATE ON reschedul
 -- El SQL vive en la migración, no aquí (G4.5).
 -- ==========================================================================
 ```
+
+## Tabla: prescriptions (v0.4.0)
+
+Agregada en migración `2026_08_06_000001_create_prescriptions_table.php`.
+
+| Columna | Tipo | Nullable | Default | Descripción |
+|---------|------|----------|---------|-------------|
+| id | uuid | NO | gen_random_uuid() | PK |
+| consultation_id | uuid | SÍ | NULL | FK → consultations(id) ON DELETE SET NULL |
+| doctor_id | uuid | NO | — | FK → users(id) ON DELETE RESTRICT |
+| patient_id | uuid | NO | — | FK → users(id) ON DELETE RESTRICT |
+| fecha | date | NO | CURRENT_DATE | Fecha de la prescripción |
+| medicamentos | jsonb | NO | '[]'::jsonb | Array de medicamentos: [{nombre, dosis, frecuencia, duracion}] |
+| indicaciones | text | SÍ | NULL | Indicaciones generales |
+| notas | text | SÍ | NULL | Notas internas del médico |
+| status | varchar(20) | NO | 'active' | CHECK: active, cancelled |
+| created_at | timestamptz | NO | now() | |
+| updated_at | timestamptz | NO | now() | |
+| deleted_at | timestamptz | SÍ | NULL | Soft delete |
+
+### Indexes
+- `idx_prescriptions_doctor` ON (doctor_id)
+- `idx_prescriptions_patient` ON (patient_id)
+- `idx_prescriptions_consultation` ON (consultation_id)
+
+### RLS (Row Level Security)
+```sql
+CREATE POLICY prescriptions_policy ON prescriptions
+    USING (
+        current_setting('app.current_user_role', true) = 'admin'
+        OR doctor_id = current_setting('app.current_user_id', true)::uuid
+        OR patient_id = current_setting('app.current_user_id', true)::uuid
+    );
+```
+
+### Permisos
+```sql
+GRANT SELECT, INSERT, UPDATE ON prescriptions TO app_runtime;
+```
