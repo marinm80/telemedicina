@@ -32,3 +32,7 @@ Thumbs.db
 
 # Temporal / scratch
 /scratch/
+
+# Contiene secretos reales de producción (APP_KEY, passwords de DB) —
+# nunca subir esto a un repo público.
+/docs/DEPLOY_COOLIFY.md
