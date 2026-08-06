@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -69,6 +70,25 @@ class HandleInertiaRequests extends Middleware
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
             ],
+            'pendingDoctors' => fn () => DB::connection('pgsql_admin')
+                ->table('doctor_profiles')
+                ->where('status', 'pending')
+                ->count(),
+            'pendingAppointments' => function () use ($request) {
+                if (!$request->user()) return 0;
+                return DB::connection('pgsql_admin')
+                    ->table('appointments')
+                    ->where(function($q) use ($request) {
+                        $role = $request->user()->role;
+                        if ($role === 'patient') {
+                            $q->where('patient_id', $request->user()->id);
+                        } elseif ($role === 'doctor') {
+                            $q->where('doctor_id', $request->user()->id);
+                        }
+                    })
+                    ->whereIn('status', ['pending', 'confirmed'])
+                    ->count();
+            },
         ];
     }
 }

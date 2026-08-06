@@ -17,8 +17,10 @@ use App\Actions\Appointments\GetDoctorAvailabilityAction;
 use App\Actions\Appointments\RejectRescheduleRequestAction;
 use App\Exceptions\AppointmentNotFoundException;
 use App\Exceptions\InvalidAppointmentStatusException;
+use App\Exceptions\PatientSlotCollisionException;
 use App\Exceptions\RescheduleCollisionException;
 use App\Exceptions\RescheduleRequestNotFoundException;
+use App\Exceptions\SlotCollisionException;
 use App\Exceptions\UnauthorizedCancellationException;
 use App\Http\Requests\AvailabilityRequest;
 use App\Http\Requests\BookAppointmentRequest;
@@ -36,14 +38,25 @@ final class AppointmentController extends Controller
     {
         $idempotencyKey = $request->header('X-Idempotency-Key');
         
-        $appointment = $action->handle(
-            $request->validated(),
-            (string) $idempotencyKey
-        );
-
-        return AppointmentResource::make($appointment)
-            ->response()
-            ->setStatusCode(201);
+        try {
+            $appointment = $action->handle(
+                $request->validated(),
+                (string) $idempotencyKey
+            );
+            return AppointmentResource::make($appointment)
+                ->response()
+                ->setStatusCode(201);
+        } catch (PatientSlotCollisionException $e) {
+            return response()->json([
+                'error_code' => 'PATIENT_SLOT_COLLISION',
+                'message'    => $e->getMessage(),
+            ], 409);
+        } catch (SlotCollisionException $e) {
+            return response()->json([
+                'error_code' => 'SLOT_COLLISION',
+                'message'    => $e->getMessage(),
+            ], 409);
+        }
     }
 
     /**

@@ -13,6 +13,7 @@ use App\Models\Appointment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\QueryException;
 use App\Exceptions\IdempotencyCollisionException;
+use App\Exceptions\PatientSlotCollisionException;
 use App\Exceptions\SlotCollisionException;
 
 final readonly class BookAppointmentAction
@@ -44,6 +45,20 @@ final readonly class BookAppointmentAction
         try {
             return DB::transaction(function () use ($data, $idempotencyKey, $payloadHash): Appointment {
                 $franjaRange = sprintf('[%s, %s)', $data['franja_inicio'], $data['franja_fin']);
+
+                // Check patient slot overlap
+                $patientOverlap = DB::connection('pgsql_admin')
+                    ->table('appointments')
+                    ->where('patient_id', $data['patient_id'])
+                    ->where('status', '!=', 'cancelled')
+                    ->whereRaw("franja && tstzrange(?, ?)", [$data['franja_inicio'], $data['franja_fin']])
+                    ->first();
+
+                if ($patientOverlap) {
+                    throw new PatientSlotCollisionException(
+                        'Ya tienes una cita agendada en ese horario.'
+                    );
+                }
 
                 return Appointment::create([
                     'patient_id'               => $data['patient_id'],

@@ -75,4 +75,10 @@ Route::middleware(['web', SetPostgresSessionContext::class])->group(function () 
         Route::patch('/users/{id}/password', [\App\Http\Controllers\Api\AdminSettingsController::class, 'changePassword']);
         Route::patch('/users/{id}/role', [\App\Http\Controllers\Api\AdminSettingsController::class, 'updateUserRole']);
     });
+    // Doctor self-service schedule management
+    Route::middleware('role:doctor')->prefix('doctor')->group(function () {
+        Route::get('/schedules', [\App\Http\Controllers\Api\DoctorScheduleController::class, 'index']);
+        Route::post('/schedules', [\App\Http\Controllers\Api\DoctorScheduleController::class, 'store']);
+        Route::delete('/schedules/{id}', [\App\Http\Controllers\Api\DoctorScheduleController::class, 'destroy']);
+    });
 });

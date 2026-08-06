@@ -16,15 +16,17 @@ final class AppointmentController extends Controller
      */
     public function index(Request $request): Response
     {
-        $allowedUserCols = ['id', 'name', 'last_name', 'email'];
+        $user = $request->user();
+        $db = DB::connection('pgsql_admin');
 
-        $query = DB::table('appointments as a')
+        $query = $db->table('appointments as a')
             ->select([
                 'a.id',
                 'a.patient_id',
                 DB::raw("u_pat.name || ' ' || u_pat.last_name AS patient_name"),
                 'a.doctor_id',
                 DB::raw("u_doc.name || ' ' || u_doc.last_name AS doctor_name"),
+                DB::raw("s.name AS doctor_specialty"),
                 DB::raw("lower(a.franja) AS franja_start"),
                 DB::raw("upper(a.franja) AS franja_end"),
                 'a.status',
@@ -32,7 +34,16 @@ final class AppointmentController extends Controller
                 'a.cancellation_reason',
             ])
             ->join('users as u_pat', 'u_pat.id', '=', 'a.patient_id')
-            ->join('users as u_doc', 'u_doc.id', '=', 'a.doctor_id');
+            ->join('users as u_doc', 'u_doc.id', '=', 'a.doctor_id')
+            ->leftJoin('doctor_profiles as dp', 'dp.user_id', '=', 'a.doctor_id')
+            ->leftJoin('doctor_specialties as ds', 'ds.doctor_profile_id', '=', 'dp.id')
+            ->leftJoin('specialties as s', 's.id', '=', 'ds.specialty_id');
+
+        if ($user && $user->role === 'patient') {
+            $query->where('a.patient_id', $user->id);
+        } elseif ($user && $user->role === 'doctor') {
+            $query->where('a.doctor_id', $user->id);
+        }
 
         if ($status = $request->input('status')) {
             $query->where('a.status', $status);
@@ -41,7 +52,7 @@ final class AppointmentController extends Controller
         $appointments = $query->orderByRaw("lower(a.franja) DESC")
             ->get()
             ->map(function ($app) {
-                $consultation = DB::table('consultations')->where('appointment_id', $app->id)->first();
+                $consultation = DB::connection('pgsql_admin')->table('consultations')->where('appointment_id', $app->id)->first();
                 
                 return [
                     'id'                  => $app->id,
@@ -49,6 +60,7 @@ final class AppointmentController extends Controller
                     'patient_name'        => $app->patient_name,
                     'doctor_id'           => $app->doctor_id,
                     'doctor_name'         => $app->doctor_name,
+                    'doctor_specialty'    => $app->doctor_specialty,
                     'franja_start'        => $app->franja_start,
                     'franja_end'          => $app->franja_end,
                     'status'              => $app->status,

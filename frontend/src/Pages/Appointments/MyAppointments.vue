@@ -5,18 +5,34 @@
   ====================================================================
 -->
 <script setup lang="ts">
-import { ref, computed, inject, onMounted, onUnmounted } from 'vue';
+import { ref, computed, inject } from 'vue';
+import { router } from '@inertiajs/vue3';
 import { i18nKey } from '@/i18n/plugin';
-import { useAppState } from '@/composables/useAppState';
 import AppLayout from '@/layouts/AppLayout.vue';
-import SpinnerLoader from '@/components/ui/SpinnerLoader.vue';
-import ErrorFallback from '@/components/ui/ErrorFallback.vue';
-import EmptyState from '@/components/ui/EmptyState.vue';
-import { mockAppointments, STATUS_CONFIG, getInitials, getAvatarColor } from '@/lib/mockData';
+import { STATUS_CONFIG, getInitials, getAvatarColor } from '@/lib/mockData';
 import { formatInUserTimezone } from '@/lib/timezone';
 import { validateCancel, validateReschedule, getCsrfToken, refundLabel } from '@/lib/appointmentHelpers';
 import type { CancelledAppointment, RescheduleResponse } from '@/types/api.types';
-import type { AppointmentDisplay } from '@/lib/mockData';
+
+const props = defineProps<{
+  appointments: Array<{
+    id: string;
+    patient_id: string;
+    patient_name: string;
+    doctor_id: string;
+    doctor_name: string;
+    doctor_specialty?: string;
+    franja_start: string;
+    franja_end: string;
+    status: string;
+    cancelled_by: string | null;
+    cancellation_reason: string | null;
+    consultation_id: string | null;
+    can_cancel: boolean;
+    can_reschedule: boolean;
+  }>;
+  filters: Record<string, string>;
+}>();
 
 const t = inject(i18nKey)!;
 const USER_TZ = 'America/Argentina/Buenos_Aires';
@@ -24,32 +40,14 @@ const USER_TZ = 'America/Argentina/Buenos_Aires';
 type FilterTab = 'todas' | 'proximas' | 'pasadas';
 const activeTab = ref<FilterTab>('todas');
 
-const fetcher = async (signal: AbortSignal): Promise<AppointmentDisplay[]> => {
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  signal.throwIfAborted();
-  return [...mockAppointments];
-};
-
-const { items, estado, error, estaVacio, cargar } = useAppState<AppointmentDisplay>(fetcher);
-
-const controller = new AbortController();
-
-onMounted(() => {
-  cargar(controller.signal);
-});
-
-onUnmounted(() => {
-  controller.abort();
-});
-
 const filteredAppointments = computed(() => {
   if (activeTab.value === 'proximas') {
-    return items.value.filter((a) => a.status === 'pending' || a.status === 'confirmed');
+    return props.appointments.filter((a) => a.status === 'pending' || a.status === 'confirmed');
   }
   if (activeTab.value === 'pasadas') {
-    return items.value.filter((a) => a.status === 'completed' || a.status === 'cancelled');
+    return props.appointments.filter((a) => a.status === 'completed' || a.status === 'cancelled');
   }
-  return items.value;
+  return props.appointments;
 });
 
 function formatDate(iso: string): string {
@@ -88,13 +86,13 @@ function statusBorderColor(status: string): string {
 }
 
 // â”€â”€ CancelaciÃ³n RF-25 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const cancelTarget = ref<AppointmentDisplay | null>(null);
+const cancelTarget = ref<any | null>(null);
 const cancelReason = ref('');
 const cancelSubmitting = ref(false);
 const cancelError = ref('');
 const cancelResult = ref<CancelledAppointment | null>(null);
 
-function openCancelModal(appt: AppointmentDisplay) {
+function openCancelModal(appt: any) {
   cancelTarget.value = appt;
   cancelReason.value = '';
   cancelError.value = '';
@@ -137,11 +135,8 @@ async function submitCancel() {
     if (res.ok) {
       const json = await res.json();
       cancelResult.value = json;
-      // Actualizar estado local
-      const idx = items.value.findIndex((a) => a.id === json.appointment_id);
-      if (idx >= 0) {
-        items.value[idx] = { ...items.value[idx], status: 'cancelled' };
-      }
+      // Actualizar estado local recargando
+      router.reload({ only: ['appointments'] });
     } else if (res.status === 409) {
       cancelError.value = 'Esta cita ya fue cancelada o completada.';
     } else if (res.status === 403) {
@@ -158,7 +153,7 @@ async function submitCancel() {
 }
 
 // â”€â”€ ReprogramaciÃ³n RF-11 Solicitud y AprobaciÃ³n de ReprogramaciÃ³n â”€â”€â”€â”€â”€â”€
-const rescheduleTarget = ref<AppointmentDisplay | null>(null);
+const rescheduleTarget = ref<any | null>(null);
 const rescheduleStart = ref('');
 const rescheduleEnd = ref('');
 const rescheduleReason = ref('');
@@ -166,7 +161,7 @@ const rescheduleSubmitting = ref(false);
 const rescheduleError = ref('');
 const rescheduleResult = ref<RescheduleResponse | null>(null);
 
-function openRescheduleModal(appt: AppointmentDisplay) {
+function openRescheduleModal(appt: any) {
   rescheduleTarget.value = appt;
   rescheduleStart.value = '';
   rescheduleEnd.value = '';
@@ -257,10 +252,7 @@ async function acknowledgeNote(appointmentId: string, consultationId: string) {
 
     if (res.ok) {
       // Marcar la cita como acusada localmente
-      const idx = items.value.findIndex((a) => a.id === appointmentId);
-      if (idx >= 0) {
-        (items.value[idx] as unknown as Record<string, unknown>).acknowledged = true;
-      }
+      router.reload({ only: ['appointments'] });
     } else if (res.status === 422) {
       acknowledgeError.value = 'La nota aÃºn estÃ¡ en borrador.';
     } else {
@@ -313,8 +305,8 @@ async function downloadPdf(consultationId: string) {
   <div class="appointments">
     <header class="appointments__header">
       <h1 class="appointments__title">Mis Citas</h1>
-      <p v-if="estado === 'listo'" class="appointments__subtitle">
-        {{ items.length }} citas en total
+      <p class="appointments__subtitle">
+        {{ props.appointments.length }} citas en total
       </p>
     </header>
 
@@ -330,31 +322,18 @@ async function downloadPdf(consultationId: string) {
       </button>
     </div>
 
-    <!-- Estado: cargando -->
-    <SpinnerLoader v-if="estado === 'cargando'" variant="list" :lines="4" />
-
-    <!-- Estado: error -->
-    <ErrorFallback
-      v-else-if="estado === 'error'"
-      :message="error ?? t('history.error')"
-      :on-retry="() => cargar()"
-    />
-
     <!-- Estado: vacÃ­o -->
-    <EmptyState
-      v-else-if="estaVacio"
-      :message="t('history.empty')"
-      :action-label="t('history.empty_action')"
-    />
+    <div v-if="props.appointments.length === 0" style="padding: 2rem; text-align: center; color: var(--color-text-muted);">
+      <p>{{ t('history.empty') }}</p>
+    </div>
 
     <!-- Sin resultados en el filtro activo -->
-    <EmptyState
-      v-else-if="estado === 'listo' && filteredAppointments.length === 0"
-      message="No hay citas en esta categorÃ­a."
-    />
+    <div v-else-if="filteredAppointments.length === 0" style="padding: 2rem; text-align: center; color: var(--color-text-muted);">
+      <p>No hay citas en esta categorÃ­a.</p>
+    </div>
 
     <!-- Estado: listo -->
-    <div v-else-if="estado === 'listo'" class="appointments__list">
+    <div v-else class="appointments__list">
       <div
         v-for="appt in filteredAppointments"
         :key="appt.id"
@@ -373,8 +352,8 @@ async function downloadPdf(consultationId: string) {
           <span class="appt-card__specialty">{{ appt.doctor_specialty }}</span>
           <span class="appt-card__datetime">
             <i class="pi pi-calendar" aria-hidden="true" />
-            {{ formatDate(appt.franja_inicio) }}
-            Â· {{ formatTime(appt.franja_inicio) }} â€“ {{ formatTime(appt.franja_fin) }}
+            {{ formatDate(appt.franja_start) }}
+            Â· {{ formatTime(appt.franja_start) }} â€“ {{ formatTime(appt.franja_end) }}
           </span>
         </div>
 

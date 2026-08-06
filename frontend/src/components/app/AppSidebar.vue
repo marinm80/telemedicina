@@ -81,6 +81,8 @@ const emit = defineEmits(['switch-role', 'start-booking'])
 
 const page = usePage()
 const user = computed(() => (page.props as any).auth?.user || {})
+const pendingDoctors = computed(() => (page.props as any).pendingDoctors || 0);
+const pendingAppointments = computed(() => (page.props as any).pendingAppointments || 0);
 
 const isAdmin = computed(() => user.value.role === 'admin')
 const currentRole = ref(user.value.role || 'patient')
@@ -127,42 +129,29 @@ const availableRoles = computed(() => {
   return rolesList
 })
 
-const navItems = {
+const navItems = computed(() => ({
   admin: [
     { label: 'Resumen', path: '/admin', icon: 'pi-chart-bar' },
-    { label: 'Verificaciones', path: '/admin/verificaciones', icon: 'pi-verified', badge: '3' },
-    { label: 'Médicos', path: '/admin/medicos', icon: 'pi-users' },
-    { label: 'Pacientes', path: '/admin/pacientes', icon: 'pi-heart' },
-    { label: 'Facturación', path: '/admin/facturacion', icon: 'pi-credit-card' },
-    { label: 'Ajustes', path: '/admin/ajustes', icon: 'pi-cog' }
+    { label: 'Panel de Control', path: '/admin/panel', icon: 'pi-cog', badge: pendingDoctors.value > 0 ? String(pendingDoctors.value) : '' },
+    { label: 'Mis Citas', path: '/appointments', icon: 'pi-calendar', badge: pendingAppointments.value > 0 ? String(pendingAppointments.value) : '' },
   ],
   doctor: [
-    { label: 'Hoy', path: '/admin', icon: 'pi-calendar' }, // Requested path from prompt
-    { label: 'Mi agenda', path: '/agenda', icon: 'pi-calendar-plus' },
-    { label: 'Pacientes', path: '/admin/pacientes', icon: 'pi-heart' },
-    { label: 'Notas clínicas', path: '/admin/notas', icon: 'pi-file-edit', badge: '2' },
-    { label: 'Recetas', path: '/admin/recetas', icon: 'pi-file' },
-    { label: 'Ingresos', path: '/admin/ingresos', icon: 'pi-wallet' },
-    { label: 'Perfil público', path: '/admin/perfil', icon: 'pi-user' }
+    { label: 'Mis Citas', path: '/appointments', icon: 'pi-calendar', badge: pendingAppointments.value > 0 ? String(pendingAppointments.value) : '' },
+    { label: 'Mis Horarios', path: '/doctor/horarios', icon: 'pi-clock' },
   ],
   patient: [
-    { label: 'Inicio', path: '/admin', icon: 'pi-home' },
-    { label: 'Mis citas', path: '/appointments', icon: 'pi-calendar', badge: '1' },
-    { label: 'Recetas', path: '/admin/recetas', icon: 'pi-file' },
-    { label: 'Resultados', path: '/admin/resultados', icon: 'pi-chart-line' },
-    { label: 'Pagos', path: '/admin/pagos', icon: 'pi-credit-card' },
-    { label: 'Perfil', path: '/admin/perfil', icon: 'pi-user' }
+    { label: 'Directorio Médicos', path: '/paciente/directorio', icon: 'pi-search' },
+    { label: 'Mis Citas', path: '/appointments', icon: 'pi-calendar', badge: pendingAppointments.value > 0 ? String(pendingAppointments.value) : '' },
   ],
   agent: [
     { label: 'Recepción', path: '/admin', icon: 'pi-inbox' },
-    { label: 'Citas pendientes', path: '/admin/citas', icon: 'pi-calendar', badge: '5' },
+    { label: 'Citas', path: '/appointments', icon: 'pi-calendar', badge: pendingAppointments.value > 0 ? String(pendingAppointments.value) : '' },
     { label: 'Directorio', path: '/directory', icon: 'pi-search' },
-    { label: 'Pacientes', path: '/admin/pacientes', icon: 'pi-heart' }
   ]
-}
+}))
 
 const currentNavItems = computed(() => {
-  return navItems[currentRole.value as keyof typeof navItems] || navItems.patient
+  return navItems.value[currentRole.value as keyof typeof navItems.value] || navItems.value.patient
 })
 
 const setRole = (role: string) => {
