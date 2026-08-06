@@ -15,6 +15,7 @@
 FROM node:22-alpine AS frontend-build
 WORKDIR /repo
 COPY frontend/ ./frontend/
+COPY docs/ ./docs/
 WORKDIR /repo/frontend
 RUN corepack enable && corepack prepare pnpm@latest --activate
 RUN pnpm install --frozen-lockfile
@@ -31,11 +32,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && apt-get install -y --no-install-recommends $PHPIZE_DEPS \
+    && docker-php-ext-install pdo pdo_pgsql zip bcmath \
     && pecl install redis \
     && docker-php-ext-enable redis \
     && apt-get purge -y --auto-remove $PHPIZE_DEPS \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
-RUN docker-php-ext-install pdo pdo_pgsql zip bcmath
 
 RUN a2enmod rewrite
 COPY docker/000-default.conf /etc/apache2/sites-available/000-default.conf
@@ -49,7 +50,8 @@ COPY --from=frontend-build /repo/backend/public/build ./public/build
 
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress \
     && cp .env.example .env \
-    && chown -R www-data:www-data storage bootstrap/cache
+    && chown -R www-data:www-data storage bootstrap/cache \
+    && chmod -R ug+rwX storage bootstrap/cache
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

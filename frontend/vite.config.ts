@@ -12,7 +12,10 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, '../backend/public/build'),
     emptyOutDir: true,
-    manifest: true,
+    // string, no boolean: Vite 5+ escribe en <outDir>/.vite/manifest.json
+    // por defecto si manifest es `true`. Laravel busca <outDir>/manifest.json
+    // directo, sin la subcarpeta .vite/ — con un string se lo forzamos ahí.
+    manifest: 'manifest.json',
     rollupOptions: {
       input: path.resolve(import.meta.dirname, './src/main.ts'),
     },

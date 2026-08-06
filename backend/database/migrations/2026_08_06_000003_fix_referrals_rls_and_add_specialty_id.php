@@ -15,7 +15,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::connection('pgsql_admin')->statement("
+        DB::connection('pgsql_admin')->unprepared("
             -- ═══════════════════════════════════════════════════
             -- FIX P1: Corregir GUC names en RLS policies
             -- ═══════════════════════════════════════════════════
@@ -65,7 +65,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::connection('pgsql_admin')->statement("
+        DB::connection('pgsql_admin')->unprepared("
             -- Revert columns
             DROP INDEX IF EXISTS idx_referrals_appointment_id;
             ALTER TABLE referrals DROP COLUMN IF EXISTS appointment_id;

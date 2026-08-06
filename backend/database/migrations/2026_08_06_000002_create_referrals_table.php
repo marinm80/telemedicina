@@ -13,7 +13,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::connection('pgsql_admin')->statement("
+        DB::connection('pgsql_admin')->unprepared("
             CREATE TABLE referrals (
                 id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
                 consultation_id     uuid NOT NULL REFERENCES consultations(id) ON DELETE RESTRICT,
