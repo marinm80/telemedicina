@@ -55,6 +55,11 @@ Route::middleware(['web', SetPostgresSessionContext::class])->group(function () 
     Route::put('/prescriptions/{id}', [\App\Http\Controllers\Api\PrescriptionController::class, 'update']);
     Route::delete('/prescriptions/{id}', [\App\Http\Controllers\Api\PrescriptionController::class, 'destroy']);
 
+    // Referrals (RF-REFERIDOS)
+    Route::get('/referrals', [\App\Http\Controllers\Api\ReferralController::class, 'index']);
+    Route::post('/referrals', [\App\Http\Controllers\Api\ReferralController::class, 'store']);
+    Route::put('/referrals/{id}', [\App\Http\Controllers\Api\ReferralController::class, 'update']);
+
     // Start a consultation (creates record if not exists)
     Route::post('/consultations/{appointmentId}/start', function (\Illuminate\Http\Request $request, string $appointmentId) {
         $user = $request->user();
@@ -131,4 +136,10 @@ Route::middleware(['web', SetPostgresSessionContext::class])->group(function () 
         Route::post('/schedules', [\App\Http\Controllers\Api\DoctorScheduleController::class, 'store']);
         Route::delete('/schedules/{id}', [\App\Http\Controllers\Api\DoctorScheduleController::class, 'destroy']);
     });
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/referrals', [\App\Http\Controllers\Api\ReferralController::class, 'store']);
+    Route::get('/referrals', [\App\Http\Controllers\Api\ReferralController::class, 'index']);
+    Route::put('/referrals/{id}', [\App\Http\Controllers\Api\ReferralController::class, 'update']);
 });

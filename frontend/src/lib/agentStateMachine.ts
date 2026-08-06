@@ -218,7 +218,7 @@ export function createStateMachine(): Record<AgentStateId, AgentState> {
       inputPlaceholder: 'Ej: hace 3 días...',
       next: (input: string, ctx: AgentContext) => {
         ctx.patientData.symptomsOnset = input;
-        if (input === 'control') return 'SELECT_SPECIALTY'; // skip symptoms
+        if (input === 'control') return 'SELECT_DOCTOR'; // skip symptoms
         return 'COLLECT_SYMPTOMS_SEVERITY';
       },
     },
@@ -310,7 +310,7 @@ export function createStateMachine(): Record<AgentStateId, AgentState> {
       inputEnabled: false,
       next: (input: string) => {
         if (input === 'presencial') return 'IDLE';
-        return 'SELECT_SPECIALTY';
+        return 'SELECT_DOCTOR';
       },
     },
 
@@ -326,7 +326,7 @@ export function createStateMachine(): Record<AgentStateId, AgentState> {
       inputEnabled: false,
       next: (input: string, ctx: AgentContext) => {
         ctx.preferredTimeOfDay = input as any;
-        return 'SELECT_SPECIALTY';
+        return 'SELECT_DOCTOR';
       },
     },
 
@@ -339,7 +339,7 @@ export function createStateMachine(): Record<AgentStateId, AgentState> {
 
     SELECT_DOCTOR: {
       id: 'SELECT_DOCTOR',
-      message: '', // dynamically set
+      message: 'Te conectaremos con un <strong>médico de Medicina General</strong> que evaluará tu caso. Si es necesario, te referirá a un especialista.',
       inputEnabled: false,
       next: () => 'SELECT_DATE',
     },

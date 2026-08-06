@@ -52,6 +52,24 @@ const formData = ref({
   }
 });
 
+// ── Referral State ──
+interface ReferralEntry {
+  specialty_name: string;
+  reason: string;
+  priority: 'normal' | 'urgente';
+  notes: string;
+}
+
+const referrals = ref<ReferralEntry[]>([]);
+const referralSaving = ref(false);
+
+const availableSpecialties = [
+  'Cardiología', 'Dermatología', 'Pediatría', 'Neurología',
+  'Traumatología', 'Psiquiatría', 'Ginecología', 'Endocrinología',
+  'Gastroenterología', 'Neumología', 'Urología', 'Oftalmología',
+  'Otorrinolaringología', 'Reumatología', 'Oncología',
+];
+
 const isSaving = ref(false);
 const message = ref({ text: '', type: '' });
 
@@ -156,6 +174,41 @@ const formatDateTime = (dateString: string) => {
     day: '2-digit', month: 'long', year: 'numeric',
     hour: '2-digit', minute: '2-digit'
   }).format(date);
+};
+
+// ── Referral Functions ──
+const addReferral = () => {
+  referrals.value.push({ specialty_name: '', reason: '', priority: 'normal', notes: '' });
+};
+
+const removeReferral = (index: number) => {
+  referrals.value.splice(index, 1);
+};
+
+const saveReferrals = async () => {
+  const valid = referrals.value.filter(r => r.specialty_name && r.reason.trim().length >= 3);
+  if (valid.length === 0) {
+    showMessage('Agrega al menos un referido con especialidad y motivo', 'error');
+    return;
+  }
+  referralSaving.value = true;
+  let successCount = 0;
+  for (const ref of valid) {
+    try {
+      const res = await fetch('/api/referrals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': getCsrfToken() || '' },
+        body: JSON.stringify({ consultation_id: props.consultation.id, ...ref }),
+      });
+      if (res.ok) successCount++;
+    } catch { /* skip */ }
+  }
+  referralSaving.value = false;
+  if (successCount > 0) {
+    showMessage(`${successCount} referido(s) guardado(s) exitosamente`, 'success');
+  } else {
+    showMessage('Error al guardar los referidos', 'error');
+  }
 };
 </script>
 
@@ -286,6 +339,62 @@ const formatDateTime = (dateString: string) => {
               <select v-model="formData.seguimiento.intervalo" class="w-full">
                 <option v-for="opt in followUpIntervals" :key="opt" :value="opt">{{ opt }}</option>
               </select>
+            </div>
+          </div>
+          <!-- Referir a Especialista -->
+          <div class="card section-card referral-section">
+            <div class="section-header-flex">
+              <h2 class="section-title"><i class="pi pi-share-alt"></i> Referir a Especialista</h2>
+              <button class="btn-outline btn-sm" @click="addReferral">
+                <i class="pi pi-plus"></i> Agregar Referido
+              </button>
+            </div>
+
+            <div v-if="referrals.length === 0" class="referral-empty">
+              <i class="pi pi-info-circle"></i>
+              <span>Si el paciente necesita atención especializada, agrega un referido aquí.</span>
+            </div>
+
+            <div v-for="(ref, idx) in referrals" :key="idx" class="referral-card">
+              <div class="referral-card__header">
+                <span class="referral-card__number">#{{ idx + 1 }}</span>
+                <button class="referral-card__remove" @click="removeReferral(idx)" title="Eliminar referido">
+                  <i class="pi pi-times"></i>
+                </button>
+              </div>
+              <div class="referral-card__body">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Especialidad *</label>
+                    <select v-model="ref.specialty_name" class="w-full">
+                      <option value="" disabled>Seleccionar especialidad</option>
+                      <option v-for="sp in availableSpecialties" :key="sp" :value="sp">{{ sp }}</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Prioridad</label>
+                    <select v-model="ref.priority" class="w-full">
+                      <option value="normal">Normal</option>
+                      <option value="urgente">🔴 Urgente</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Motivo de la referencia *</label>
+                  <textarea v-model="ref.reason" rows="2" placeholder="Motivo clínico de la derivación..." class="w-full"></textarea>
+                </div>
+                <div class="form-group">
+                  <label>Notas adicionales</label>
+                  <textarea v-model="ref.notes" rows="1" placeholder="Observaciones opcionales..." class="w-full"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="referrals.length > 0" class="referral-actions">
+              <button class="btn-primary btn-sm" @click="saveReferrals" :disabled="referralSaving">
+                <i class="pi" :class="referralSaving ? 'pi-spin pi-spinner' : 'pi-check'"></i>
+                {{ referralSaving ? 'Guardando...' : 'Guardar Referidos' }}
+              </button>
             </div>
           </div>
         </div>
@@ -764,5 +873,44 @@ button:disabled {
 .fade-leave-to {
   opacity: 0;
   transform: translateY(-20px);
+}
+
+/* Referral Section */
+.referral-section {
+  border-top: 4px solid #0E9AA7;
+}
+.referral-empty {
+  display: flex; align-items: center; gap: 8px;
+  padding: 16px; color: var(--color-text-muted, #64748b);
+  font-size: 0.9rem; font-style: italic;
+  background: #f8fafc; border-radius: 8px;
+}
+.referral-card {
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 10px; margin-bottom: 12px;
+  overflow: hidden; transition: box-shadow 0.2s;
+}
+.referral-card:hover { box-shadow: 0 2px 8px rgba(14, 154, 167, 0.12); }
+.referral-card__header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 14px; background: #f0fdfa;
+  border-bottom: 1px solid #e2e8f0;
+}
+.referral-card__number {
+  font-size: 0.82rem; font-weight: 700; color: #0E5D52;
+}
+.referral-card__remove {
+  background: none; border: none; color: var(--color-danger, #ef4444);
+  cursor: pointer; padding: 4px; border-radius: 4px;
+}
+.referral-card__remove:hover { background: #fef2f2; }
+.referral-card__body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group label {
+  font-size: 0.82rem; font-weight: 600; color: var(--color-text, #1e293b);
+}
+.referral-actions {
+  display: flex; justify-content: flex-end; margin-top: 8px;
 }
 </style>

@@ -78,15 +78,6 @@
             </div>
           </div>
 
-          <!-- Specialty selection (special interactive) -->
-          <div v-if="currentStateId === 'SELECT_SPECIALTY'" class="interactive-block">
-            <div class="chips-grid">
-              <button v-for="sp in specialties" :key="sp.id" class="chip-btn" @click="selectSpecialty(sp)">
-                {{ sp.name }}
-              </button>
-            </div>
-          </div>
-
           <!-- Doctor selection -->
           <div v-if="currentStateId === 'SELECT_DOCTOR'" class="interactive-block">
             <div v-if="matchingDoctors.length === 0" class="empty-notice">No hay médicos disponibles para esta especialidad.</div>
@@ -223,19 +214,21 @@ const allDoctors = computed(() => (page.props as any).booking?.doctors || []);
 const authUser = computed(() => (page.props as any).auth?.user);
 
 const matchingDoctors = computed(() => {
-  if (!agentCtx.bookingData.specialtyName) return allDoctors.value;
-  return allDoctors.value.filter((d: any) => d.specialties.includes(agentCtx.bookingData.specialtyName));
+  // Always filter to Medicina General — specialist referrals are handled by the doctor
+  return allDoctors.value.filter((d: any) => 
+    d.specialties.some((s: string) => s.toLowerCase().includes('medicina general'))
+  );
 });
 
 // ── Computed from current state ──
 const currentState = computed(() => stateMachine[currentStateId.value]);
 const currentQuickOptions = computed(() => {
   // Don't show quick options for states with custom interactive UI
-  if (['SELECT_SPECIALTY', 'SELECT_DOCTOR', 'SELECT_DATE', 'SELECT_SLOT', 'CONFIRMATION', 'TRIAGE_DECISION'].includes(currentStateId.value)) return [];
+  if (['SELECT_DOCTOR', 'SELECT_DATE', 'SELECT_SLOT', 'CONFIRMATION', 'TRIAGE_DECISION'].includes(currentStateId.value)) return [];
   return currentState.value?.quickOptions || [];
 });
 const currentInputEnabled = computed(() => {
-  if (['SELECT_SPECIALTY', 'SELECT_DOCTOR', 'SELECT_DATE', 'SELECT_SLOT', 'CONFIRMATION'].includes(currentStateId.value)) return false;
+  if (['SELECT_DOCTOR', 'SELECT_DATE', 'SELECT_SLOT', 'CONFIRMATION'].includes(currentStateId.value)) return false;
   return currentState.value?.inputEnabled ?? false;
 });
 const currentPlaceholder = computed(() => currentState.value?.inputPlaceholder || 'Escribe tu mensaje...');
@@ -319,6 +312,19 @@ function transitionTo(stateId: AgentStateId) {
     simulateTyping(state.message, isEmg ? 300 : 800, isEmg);
     if (isEmg) logAudit(auditLog.value, stateId, 'EMERGENCY_DETECTED', 'Flujo detenido por seguridad');
   }
+
+  // Auto-route to Medicina General
+  if (stateId === 'SELECT_DOCTOR') {
+    agentCtx.bookingData.specialtyId = '';
+    agentCtx.bookingData.specialtyName = 'Medicina General';
+    const docs = matchingDoctors.value;
+    if (docs.length === 1) {
+      // Auto-select the only general doctor
+      setTimeout(() => selectDoctor(docs[0]), 1000);
+    } else if (docs.length === 0) {
+      setTimeout(() => addMessage('assistant', '⚠️ No hay médicos de Medicina General disponibles en este momento.'), 1000);
+    }
+  }
 }
 
 function buildTriageMessage(): string {
@@ -388,21 +394,6 @@ function handleQuickOption(opt: QuickOption) {
 }
 
 // ── Booking step handlers (same as before but using state machine) ──
-function selectSpecialty(sp: any) {
-  agentCtx.bookingData.specialtyId = sp.id;
-  agentCtx.bookingData.specialtyName = sp.name;
-  addMessage('user', `🏥 ${sp.name}`);
-  logAudit(auditLog.value, 'SELECT_SPECIALTY', 'SELECTED', sp.name);
-
-  const docs = matchingDoctors.value;
-  if (docs.length === 0) {
-    simulateTyping('No hay médicos disponibles para esa especialidad. <strong>¿Deseas elegir otra?</strong>');
-  } else {
-    transitionTo('SELECT_DOCTOR');
-    simulateTyping(`Tenemos <strong>${docs.length} médico(s)</strong> de ${sp.name}. <strong>¿Con cuál deseas agendar?</strong>`);
-  }
-}
-
 function selectDoctor(doc: any) {
   agentCtx.bookingData.doctorId = doc.user_id;
   agentCtx.bookingData.doctorProfileId = doc.doctor_profile_id;
@@ -410,7 +401,6 @@ function selectDoctor(doc: any) {
   addMessage('user', `👨‍⚕️ ${doc.full_name}`);
   logAudit(auditLog.value, 'SELECT_DOCTOR', 'SELECTED', doc.full_name);
   transitionTo('SELECT_DATE');
-  simulateTyping('Excelente elección. <strong>¿Qué día te gustaría agendar?</strong>');
 }
 
 async function selectDate() {
