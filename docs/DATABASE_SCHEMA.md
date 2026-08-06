@@ -1207,6 +1207,7 @@ GRANT SELECT, INSERT, UPDATE ON prescriptions TO app_runtime;
 | referring_doctor_id | uuid FK | Médico que refiere (users.id) |
 | patient_id | uuid FK | Paciente referido (users.id) |
 | specialty_name | varchar(100) | Especialidad destino |
+| specialty_id | uuid FK? | Referencia a specialties(id) — resuelto automáticamente |
 | referred_doctor_id | uuid FK? | Doctor específico (opcional) |
 | reason | text | Motivo de la referencia |
 | priority | varchar(20) | 'normal' \| 'urgente' |

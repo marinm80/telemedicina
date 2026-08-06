@@ -26,6 +26,11 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.
 - `FloatingAssistant.vue`: Eliminada función `selectSpecialty()`, eliminada sección template de `SELECT_SPECIALTY`, `matchingDoctors` auto-filtra a Medicina General.
 - `SELECT_DOCTOR` message: "Te conectaremos con un médico de Medicina General que evaluará tu caso."
 
+### Corregido
+- **RLS referrals (P1)**: Las políticas usaban `app.user_id` y `app.user_role` en vez de la convención del proyecto `app.current_user_id` / `app.current_user_role`. `current_setting()` devolvía NULL → pacientes y médicos veían array vacío sin error. Corregido con DROP + CREATE policies.
+- **specialty_id FK (P2)**: `specialty_name` era texto libre sin enlace al catálogo de especialidades. Agregado `specialty_id uuid REFERENCES specialties(id)` con resolución automática en `ReferralController.store()`.
+- **Modelo Specialty.php**: Creado para completar la relación FK `Referral → Specialty`.
+
 ### Notas Técnicas
 - La tabla `referrals` usa CHECK constraints para `priority` y `status`.
 - Índices en `patient_id`, `consultation_id`, `referring_doctor_id`.
