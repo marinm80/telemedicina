@@ -201,7 +201,7 @@ const logout = () => {
   position: sticky;
   top: 0;
   background-color: var(--color-sidebar-bg, #0D2622);
-  color: var(--color-text-subtle, #A6BDB8);
+  color: var(--color-sidebar-text, #B0C4BC);
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--color-border-warm, rgba(255, 255, 255, 0.05));
@@ -290,7 +290,7 @@ const logout = () => {
   border: 1px solid transparent;
   padding: var(--spacing-2, 0.5rem);
   border-radius: var(--radius-md, 0.375rem);
-  color: var(--color-text-subtle, #A6BDB8);
+  color: var(--color-sidebar-text, #B0C4BC);
   font-size: var(--text-sm, 0.875rem);
   cursor: pointer;
   display: flex;
@@ -347,7 +347,7 @@ const logout = () => {
   align-items: center;
   padding: var(--spacing-3, 0.75rem) var(--spacing-3, 0.75rem);
   border-radius: var(--radius-md, 0.375rem);
-  color: var(--color-text-subtle, #A6BDB8);
+  color: var(--color-sidebar-text, #B0C4BC);
   text-decoration: none;
   font-size: var(--text-sm, 0.875rem);
   transition: var(--transition-fast, 0.2s);
@@ -430,7 +430,7 @@ const logout = () => {
 .logout-btn {
   background: transparent;
   border: none;
-  color: var(--color-text-subtle, #A6BDB8);
+  color: var(--color-sidebar-text, #B0C4BC);
   cursor: pointer;
   padding: var(--spacing-2, 0.5rem);
   border-radius: var(--radius-md, 0.375rem);

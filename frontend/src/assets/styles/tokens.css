@@ -28,9 +28,7 @@
   /* === MARCA (teal profundo — identidad Salvia) === */
   --color-primary-50:  #E8F5F2;
   --color-primary-100: #C8E6DE;
-  --color-primary-200: #A0D4C5;
-  --color-primary-300: #73BFAA;
-  --color-primary-400: #4FA997;
+  --color-primary-400: #459587;
   --color-primary-500: #2E9E6B;  /* teal principal */
   --color-primary-600: #0E5D52;  /* deep teal — acciones, links */
   --color-primary-700: #0B4D44;  /* acciones hover */
@@ -46,7 +44,6 @@
   --color-alert:      #D9603E;  /* badges urgentes, notificaciones */
   --color-alert-dark: #B34A2A;  /* texto sobre fondo claro */
   --color-alert-bg:   #FBEAE3;  /* fondo de alertas */
-  --color-alert-soft: #F2D6C9;  /* borde de alertas */
 
   /* === SIDEBAR === */
   --color-sidebar-bg:     #17302B;
@@ -61,7 +58,7 @@
 
   /* === ESTADO: éxito === */
   --color-success-50:  #E6F4EC;
-  --color-success-700: #2E9E6B;
+  --color-success-700: #1B6E4C;
   --color-success-800: #166534;
 
   /* === ESTADO: advertencia (ámbar — NUNCA texto blanco encima) === */
@@ -90,12 +87,12 @@
   --color-text-strong:    #17302B;  /* dark green/charcoal */
   --color-text-secondary: #3D5A52;  /* verde oscuro medio */
   --color-text-muted:     #5F7A73;  /* teal-gray para subtextos */
-  --color-text-subtle:    #8FA39D;  /* labels uppercase */
-  --color-text-label:     #8FA39D;  /* alias semántico */
+  --color-text-subtle:    #5D7972;  /* labels uppercase */
+  --color-text-label:     #5D7972;  /* alias semántico */
 
   /* === BORDES Y FOCO === */
-  --color-border:      #EDE4D8;  /* warm border para cards y tablas */
-  --color-border-warm: #E8DFD3;  /* variante ligeramente más oscura */
+  --color-border:      #9E8F7A;  /* warm border para cards y tablas */
+  --color-border-warm: #8C7D68;  /* variante ligeramente más oscura */
   --color-focus-ring:  #0E5D52;  /* teal profundo para foco */
 
   /* === ESPACIADO (escala de 4px) === */

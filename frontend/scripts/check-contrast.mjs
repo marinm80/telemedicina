@@ -140,6 +140,24 @@ const PAIRS = [
   { fg: 'color-surface-0', bg: 'color-clinical-warning', type: 'text', label: 'Blanco / clinical warning' },
   { fg: 'color-clinical-warning', bg: 'color-clinical-warning-bg', type: 'text', label: 'Clinical warning / background' },
   { fg: 'color-clinical-danger', bg: 'color-clinical-danger-bg', type: 'text', label: 'Clinical danger / background' },
+
+  // --- Cobertura de tokens Salvia (rediseño 2026-08-05) ---
+  // Auditados contra el fondo/par real que usan en el código, no contra
+  // un par inventado. primary-200, primary-300 y alert-soft no aparecen
+  // acá porque no tenían NINGÚN uso real (se borraron de tokens.css en
+  // vez de auditar un uso ficticio).
+  { fg: 'color-text-strong',  bg: 'color-page-bg',      type: 'text',     label: 'Texto cuerpo / fondo página (cream)' },
+  { fg: 'color-primary-400',  bg: 'color-surface-0',    type: 'non-text', label: 'Borde reprogramar / blanco' },
+  { fg: 'color-primary-800',  bg: 'color-primary-50',   type: 'text',     label: 'Texto marca oscuro / primary-50' },
+  { fg: 'color-accent',       bg: 'color-sidebar-bg',   type: 'non-text', label: 'Acento sidebar / sidebar-bg' },
+  { fg: 'color-info-text',    bg: 'color-accent-soft',  type: 'text',     label: 'Info-text / accent-soft (badge)' },
+  { fg: 'color-text-strong',  bg: 'color-accent-muted', type: 'text',     label: 'Texto cuerpo / hover sutil' },
+  { fg: 'color-surface-0',    bg: 'color-alert',        type: 'non-text', label: 'Blanco / badge alerta (icono)' },
+  { fg: 'color-alert-dark',   bg: 'color-alert-bg',     type: 'text',     label: 'Alert-dark / alert-bg (banner demo)' },
+  { fg: 'color-sidebar-text', bg: 'color-sidebar-bg',   type: 'text',     label: 'Texto nav sidebar / sidebar-bg' },
+  { fg: 'color-text-secondary', bg: 'color-surface-0',  type: 'text',     label: 'Texto secundario login / blanco' },
+  { fg: 'color-text-label',   bg: 'color-surface-0',    type: 'text',     label: 'Label uppercase / blanco' },
+  { fg: 'color-border-warm',  bg: 'color-surface-0',    type: 'non-text', label: 'Borde warm / blanco (cards)' },
 ];
 
 // ---------------------------------------------------------------------------

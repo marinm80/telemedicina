@@ -76,7 +76,7 @@ export interface AgentContext {
   preferredTimeOfDay: 'mañana' | 'tarde' | 'noche' | '';
   modality: 'teleconsulta' | 'presencial' | '';
   emergencyDetected: boolean;
-  triageResult: 'teleconsulta' | 'presencial' | 'emergencia' | '';
+  triageResult: 'teleconsulta' | 'presencial' | 'emergencia' | 'escalado' | '';
   userName: string;
 }
 

@@ -66,6 +66,13 @@ const referralSaving = ref(false);
 
 const availableSpecialties = ref<Array<{id: string; name: string}>>([]);
 
+const isSaving = ref(false);
+const message = ref({ text: '', type: '' });
+
+const followUpIntervals = [
+  '1 semana', '2 semanas', '1 mes', '2 meses', '3 meses', '6 meses'
+];
+
 onMounted(async () => {
   // Fetch specialties from catalog
   try {
@@ -80,14 +87,6 @@ onMounted(async () => {
       availableSpecialties.value = (data.data || data).filter((s: any) => s.is_active !== false);
     }
   } catch { /* fallback empty */ }
-
-
-const isSaving = ref(false);
-const message = ref({ text: '', type: '' });
-
-const followUpIntervals = [
-  '1 semana', '2 semanas', '1 mes', '2 meses', '3 meses', '6 meses'
-];
 
   // Initialize form from existing notes
   if (props.consultation.notes) {

@@ -357,7 +357,7 @@ td {
 
 .btn-action:hover {
   background-color: var(--color-surface-50);
-  border-color: var(--color-primary-300);
+  border-color: var(--color-primary-500);
 }
 
 .empty-state {
@@ -423,7 +423,7 @@ td {
 
 .quick-action-btn:hover {
   background-color: var(--color-primary-50);
-  border-color: var(--color-primary-300);
+  border-color: var(--color-primary-500);
   color: var(--color-primary-700);
 }
 </style>

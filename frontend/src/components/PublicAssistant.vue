@@ -273,7 +273,7 @@ async function scrollToBottom() {
 .pub-assist__suggestion {
   padding: var(--spacing-2);
   background-color: var(--color-primary-50);
-  border: 1px solid var(--color-primary-200);
+  border: 1px solid var(--color-primary-500);
   border-radius: var(--radius-md);
   color: var(--color-primary-800);
   font-size: var(--text-xs);
