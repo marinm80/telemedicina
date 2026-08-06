@@ -59,7 +59,7 @@ export function generateDemoMessage(ctx: AgentContext, appointmentId?: string): 
           <tr><td style="padding: 8px 0; color: #6B7280;">📅 Fecha</td><td style="padding: 8px 0; font-weight: 600;">${dateFormatted}</td></tr>
           <tr><td style="padding: 8px 0; color: #6B7280;">🕐 Hora</td><td style="padding: 8px 0; font-weight: 600;">${timeFormatted}</td></tr>
           <tr><td style="padding: 8px 0; color: #6B7280;">📋 Motivo</td><td style="padding: 8px 0;">${motivo}</td></tr>
-          <tr><td style="padding: 8px 0; color: #6B7280;">💻 Modalidad</td><td style="padding: 8px 0;">Teleconsulta</td></tr>
+          <tr><td style="padding: 8px 0; color: #6B7280;">💻 Modalidad</td><td style="padding: 8px 0;">${ctx.modality === 'presencial' ? '🏢 Presencial (en sitio)' : '💻 Teleconsulta (remota)'}</td></tr>
         </table>
 
         <div style="background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 8px; padding: 14px; margin: 16px 0;">

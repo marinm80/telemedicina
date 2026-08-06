@@ -23,6 +23,7 @@ export type AgentStateId =
   | 'COLLECT_MEDICATIONS'
   | 'TRIAGE_DECISION'
   | 'SUGGEST_PRESENCIAL'
+  | 'SELECT_MODALITY'
   | 'TIME_PREFERENCE'
   | 'SELECT_SPECIALTY'
   | 'SELECT_DOCTOR'
@@ -73,6 +74,7 @@ export interface AgentContext {
     slotLocalTime: string;
   };
   preferredTimeOfDay: 'mañana' | 'tarde' | 'noche' | '';
+  modality: 'teleconsulta' | 'presencial' | '';
   emergencyDetected: boolean;
   triageResult: 'teleconsulta' | 'presencial' | 'emergencia' | '';
   userName: string;
@@ -294,7 +296,7 @@ export function createStateMachine(): Record<AgentStateId, AgentState> {
         if (ctx.triageResult === 'emergencia') return 'EMERGENCY_STOP';
         if (ctx.triageResult === 'presencial') return 'SUGGEST_PRESENCIAL';
         if (ctx.triageResult === 'escalado') return 'ESCALATE_HUMAN';
-        return 'TIME_PREFERENCE';
+        return 'SELECT_MODALITY';
       },
     },
 
@@ -311,6 +313,20 @@ export function createStateMachine(): Record<AgentStateId, AgentState> {
       next: (input: string) => {
         if (input === 'presencial') return 'IDLE';
         return 'SELECT_DOCTOR';
+      },
+    },
+
+    SELECT_MODALITY: {
+      id: 'SELECT_MODALITY',
+      message: '🏥 <strong>¿Cómo prefieres tu consulta?</strong>',
+      quickOptions: [
+        { label: '💻 Teleconsulta (remota)', value: 'teleconsulta' },
+        { label: '🏢 Presencial (en sitio)', value: 'presencial' },
+      ],
+      inputEnabled: false,
+      next: (input: string, ctx: AgentContext) => {
+        ctx.modality = input as 'teleconsulta' | 'presencial';
+        return 'TIME_PREFERENCE';
       },
     },
 
@@ -448,6 +464,7 @@ export function createAgentContext(userName?: string): AgentContext {
       slotLocalTime: '',
     },
     preferredTimeOfDay: '',
+    modality: '',
     emergencyDetected: false,
     triageResult: '',
     userName: userName || '',

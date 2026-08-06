@@ -119,6 +119,7 @@
               <div class="confirm-row"><strong>Fecha:</strong> {{ agentCtx.bookingData.fecha }}</div>
               <div class="confirm-row"><strong>Hora:</strong> {{ agentCtx.bookingData.slotLocalTime }}</div>
               <div class="confirm-row"><strong>Motivo:</strong> {{ agentCtx.patientData.motivo }}</div>
+              <div class="confirm-row"><strong>Modalidad:</strong> {{ agentCtx.modality === 'presencial' ? '🏢 Presencial (en sitio)' : '💻 Teleconsulta (remota)' }}</div>
               <div v-if="agentCtx.patientData.symptomsSeverity" class="confirm-row"><strong>Severidad:</strong> {{ agentCtx.patientData.symptomsSeverity }}</div>
               <div v-if="agentCtx.patientData.allergies" class="confirm-row"><strong>Alergias:</strong> {{ agentCtx.patientData.allergies }}</div>
               <div v-if="holdSeconds > 0" class="hold-timer" :class="{ 'hold-timer--warning': holdSeconds < 60 }">
@@ -517,6 +518,7 @@ async function confirmBooking() {
             <div>📅 <strong>Fecha:</strong> ${dateFormatted}</div>
             <div>🕐 <strong>Horario:</strong> ${agentCtx.bookingData.slotLocalTime}</div>
             <div>📋 <strong>Motivo:</strong> ${agentCtx.patientData.motivo}</div>
+            <div>💻 <strong>Modalidad:</strong> ${agentCtx.modality === 'presencial' ? '🏢 Presencial (en sitio)' : '💻 Teleconsulta (remota)'}</div>
             <div style="margin-top: 4px; padding-top: 6px; border-top: 1px dashed #86EFAC;">
               ✅ <strong>Estado:</strong> <span style="color: #065F46;">Pendiente de confirmación</span>
             </div>
