@@ -54,6 +54,7 @@ const formData = ref({
 
 // ── Referral State ──
 interface ReferralEntry {
+  specialty_id: string;
   specialty_name: string;
   reason: string;
   priority: 'normal' | 'urgente';
@@ -63,12 +64,23 @@ interface ReferralEntry {
 const referrals = ref<ReferralEntry[]>([]);
 const referralSaving = ref(false);
 
-const availableSpecialties = [
-  'Cardiología', 'Dermatología', 'Pediatría', 'Neurología',
-  'Traumatología', 'Psiquiatría', 'Ginecología', 'Endocrinología',
-  'Gastroenterología', 'Neumología', 'Urología', 'Oftalmología',
-  'Otorrinolaringología', 'Reumatología', 'Oncología',
-];
+const availableSpecialties = ref<Array<{id: string; name: string}>>([]);
+
+onMounted(async () => {
+  // Fetch specialties from catalog
+  try {
+    const csrfEl = document.head.querySelector('meta[name="csrf-token"]');
+    const csrf = csrfEl ? csrfEl.getAttribute('content') : '';
+    const res = await fetch('/api/specialties', {
+      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf || '' },
+      credentials: 'same-origin',
+    });
+    if (res.ok) {
+      const data = await res.json();
+      availableSpecialties.value = (data.data || data).filter((s: any) => s.is_active !== false);
+    }
+  } catch { /* fallback empty */ }
+
 
 const isSaving = ref(false);
 const message = ref({ text: '', type: '' });
@@ -77,8 +89,7 @@ const followUpIntervals = [
   '1 semana', '2 semanas', '1 mes', '2 meses', '3 meses', '6 meses'
 ];
 
-// Initialize form from existing notes if they exist
-onMounted(() => {
+  // Initialize form from existing notes
   if (props.consultation.notes) {
     try {
       let notesData = props.consultation.notes;
@@ -178,7 +189,7 @@ const formatDateTime = (dateString: string) => {
 
 // ── Referral Functions ──
 const addReferral = () => {
-  referrals.value.push({ specialty_name: '', reason: '', priority: 'normal', notes: '' });
+  referrals.value.push({ specialty_id: '', specialty_name: '', reason: '', priority: 'normal', notes: '' });
 };
 
 const removeReferral = (index: number) => {
@@ -186,7 +197,7 @@ const removeReferral = (index: number) => {
 };
 
 const saveReferrals = async () => {
-  const valid = referrals.value.filter(r => r.specialty_name && r.reason.trim().length >= 3);
+  const valid = referrals.value.filter(r => r.specialty_id && r.reason.trim().length >= 3);
   if (valid.length === 0) {
     showMessage('Agrega al menos un referido con especialidad y motivo', 'error');
     return;
@@ -366,9 +377,9 @@ const saveReferrals = async () => {
                 <div class="form-row">
                   <div class="form-group">
                     <label>Especialidad *</label>
-                    <select v-model="ref.specialty_name" class="w-full">
+                    <select v-model="ref.specialty_id" class="w-full" @change="ref.specialty_name = availableSpecialties.find(s => s.id === ref.specialty_id)?.name || ''">
                       <option value="" disabled>Seleccionar especialidad</option>
-                      <option v-for="sp in availableSpecialties" :key="sp" :value="sp">{{ sp }}</option>
+                      <option v-for="sp in availableSpecialties" :key="sp.id" :value="sp.id">{{ sp.name }}</option>
                     </select>
                   </div>
                   <div class="form-group">

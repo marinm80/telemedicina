@@ -48,6 +48,7 @@ final class BookAppointmentRequest extends FormRequest
             ],
             'franja_inicio' => ['required', 'date', 'after:now'],
             'franja_fin' => ['required', 'date', 'after:franja_inicio'],
+            'referral_id' => ['nullable', 'uuid'],
         ];
     }
 

@@ -1,6 +1,6 @@
 # Brief — Cerrar el flujo de Referidos → Agendamiento
 
-> **Estado**: sin implementar. Este documento es el punto de partida, no una decisión cerrada — las secciones marcadas ❓ necesitan tu decisión antes de codear.
+> **Estado**: decisiones cerradas (ver sección 7), sin implementar todavía.
 > **Por qué existe**: es el hueco más señalado en la revisión de portfolio — un paciente referido a un especialista hoy tiene que buscarlo manualmente, sin continuidad desde la consulta que generó el referido.
 
 ---
@@ -40,11 +40,12 @@ Cuando un médico general refiere a un paciente a un especialista durante una co
 ## 2. Alcance
 
 **Dentro de alcance (v1):**
-- Vista del paciente donde ve sus referidos pendientes (hoy no existe ninguna).
+- Página dedicada `Patient/MyReferrals.vue` con tabs Pendientes / Aceptados / Completados (patrón consistente con `MyAppointments.vue`), más su entrada en `AppSidebar.vue` con badge de conteo de pendientes.
 - Deep-link desde un referido hacia el flujo de booking:
   - Si el médico especificó `referred_doctor_id` → directo a `/booking/{doctorProfileId}` con ese médico precargado.
   - Si solo especificó especialidad → a `/directory?specialty_id=X`, con el filtro ya aplicado.
-- Al completarse la cita desde ese flujo, marcar el referido como `accepted` (o `completed` si preferís esperar a que la consulta ocurra — ver ❓ abajo).
+- Ciclo de vida completo de dos transiciones (ver decisión ❓1): `pending` → `accepted` al agendar la cita → `completed` al firmarse la nota de la consulta con el especialista.
+- Tratamiento visual de prioridad `urgente` (ver decisión ❓3): badge + orden + copy, sin bloqueo funcional.
 - Corregir P1 y P2.
 
 **Fuera de alcance (v1) — decidí explícitamente no hacerlo para no inflar el brief:**
@@ -57,6 +58,14 @@ Cuando un médico general refiere a un paciente a un especialista durante una co
 ```sql
 -- Migración nueva (no tocar la de 2026_08_06_000002 — es inmutable)
 ALTER TABLE referrals ADD COLUMN specialty_id integer REFERENCES specialties(id);
+
+-- appointment_id ES la pieza que falta para la transición accepted -> completed:
+-- consultation_id (ya existe) apunta a la consulta del médico QUE REFIERE (el origen).
+-- appointment_id (nuevo) apunta a la cita QUE EL PACIENTE AGENDÓ con el especialista
+-- (el destino). Sin este campo, ConsultationFormController::archive() no tiene cómo
+-- saber que la consulta que está firmando cierra un referido.
+ALTER TABLE referrals ADD COLUMN appointment_id uuid REFERENCES appointments(id) ON DELETE SET NULL;
+CREATE INDEX idx_referrals_appointment_id ON referrals(appointment_id);
 
 DROP POLICY referrals_patient_policy ON referrals;
 DROP POLICY referrals_doctor_policy ON referrals;
@@ -80,14 +89,36 @@ CREATE POLICY referrals_admin_policy ON referrals
 
 - `ReferralController::store()`: aceptar `specialty_id` (validar que existe en `specialties` y está `is_active`), seguir aceptando `specialty_name` como snapshot de texto (autocompletado del nombre, no editable).
 - `ReferralController::index()`: sin cambios de lógica — una vez arreglado P1, ya filtra correctamente por RLS. Confirmar que el eager-load de `referredDoctor` incluya lo necesario para armar el link (`doctor_profile_id` no está en `users`, está en `doctor_profiles` — puede necesitar un join adicional o exponerlo desde `v_doctor_directory`).
-- Nuevo endpoint (o extender `update()`): al agendar desde un referido, el frontend debería poder mandar `referral_id` junto con `POST /api/appointments`, y el backend marca el referido como `accepted` dentro de la misma transacción de `BookAppointmentAction`. ❓ ver decisión abajo.
+
+**Transición 1 — `pending` → `accepted` (al agendar):**
+El frontend manda `referral_id` junto con `POST /api/appointments`. Dentro de `BookAppointmentAction::handle()` (misma transacción, para que no quede un estado a medias si la cita falla por colisión de slot):
+```php
+if (!empty($data['referral_id'])) {
+    DB::connection('pgsql_admin')->table('referrals')
+        ->where('id', $data['referral_id'])
+        ->update(['status' => 'accepted', 'appointment_id' => $appointment->id, 'updated_at' => now()]);
+}
+```
+
+**Transición 2 — `accepted` → `completed` (al firmar la nota):**
+`ConsultationFormController::archive()` ya resuelve `$consultation->appointment_id` en la línea 96 para validar autorización. Justo después de eso, un `UPDATE` con la misma condición que propusiste:
+```php
+$db->table('referrals')
+    ->where('appointment_id', $consultation->appointment_id)
+    ->where('status', 'accepted')
+    ->update(['status' => 'completed', 'updated_at' => now()]);
+```
+Es literalmente el UPDATE de una línea que mencionaste — no hace falta tocar la firma de la nota ni el resto del método.
+
 - Limpieza menor: `backend/routes/api.php` registra las 3 rutas de `/referrals` dos veces (líneas ~58-61 dentro del grupo `['web', SetPostgresSessionContext::class]`, y otra vez al final dentro de `auth:sanctum` — esta segunda copia es código muerto, Laravel nunca la alcanza). Borrar el bloque `auth:sanctum` duplicado.
 
 ## 5. Cambios de frontend
 
-- **Nuevo**: sección "Referidos pendientes" en `PatientDashboard.vue` (o página dedicada `Patient/MyReferrals.vue`, tu decisión de IA — dado que ya existe `MyAppointments.vue` como referencia de patrón, una página dedicada es más consistente).
-  - Cada card: especialidad, motivo (`reason`), prioridad (`urgente` destacado en terracotta, coherente con la paleta Salvia), médico que refirió, y botón de acción.
+- **Nuevo**: `Patient/MyReferrals.vue`, página dedicada con 3 tabs (Pendientes / Aceptados / Completados), mismo patrón de `MyAppointments.vue`.
+  - Dentro de "Pendientes": los `urgente` van primero (sort en el frontend por `priority` antes que por fecha, o en el backend en `ReferralController::index()` con `ORDER BY (priority = 'urgente') DESC, created_at ASC` — mejor en backend para no repetir la lógica si otra vista lista referidos).
+  - Cada card: especialidad, motivo (`reason`), médico que refirió, y botón de acción. Si `priority = 'urgente'`: badge terracotta con ⚠️ reutilizando el estilo `severity="critical"` de `AlertCard.vue` (misma animación pulsante que ya existe, no una nueva), + texto "Tu médico marcó esto como urgente — agenda lo antes posible". Sin botón de "descartar" que bloquee nada — es solo señal visual.
   - Botón de acción resuelve el link: `referred_doctor_id` presente → `/booking/{doctorProfileId}`; si no → `/directory?specialty_id=X`.
+- **`AppSidebar.vue`**: nuevo item de navegación "Mis Referidos" para el rol `patient`, con badge de conteo (cantidad de `pending`, con variante de color si hay algún `urgente` entre ellos).
 - `BookingWizard.vue` / flujo de confirmación: si la navegación vino de un referido (pasar `referral_id` como query param), incluirlo en el payload de `POST /api/appointments` para que el backend cierre el círculo.
 - `ConsultationView.vue` (lado médico, donde ya se crea el referido): cambiar el input de especialidad de texto libre a `<select>` contra `specialties` activas, mandando `specialty_id`.
 
@@ -112,17 +143,29 @@ Escenario: Referido sin médico específico lleva al directorio filtrado
 Escenario: Agendar desde un referido lo marca como aceptado
   Dado un referido pendiente
   Cuando María completa el booking desde ese referido
-  Entonces el referido pasa a status='accepted'
-  Y ya no aparece en la lista de "pendientes" del dashboard
+  Entonces el referido pasa a status='accepted' con appointment_id apuntando a la nueva cita
+  Y aparece en la tab "Aceptados" de MyReferrals.vue, no en "Pendientes"
+
+Escenario: Firmar la nota de la consulta del especialista completa el referido
+  Dado un referido en status='accepted' con appointment_id apuntando a la cita de la Dra. García
+  Cuando la Dra. García firma y archiva la nota de esa consulta (ConsultationFormController::archive)
+  Entonces el referido pasa a status='completed'
+  Y aparece en la tab "Completados" de MyReferrals.vue
+
+Escenario: Un referido urgente se muestra primero y con badge distintivo
+  Dado que María tiene un referido normal creado ayer y uno urgente creado hoy
+  Cuando entra a la tab "Pendientes" de MyReferrals.vue
+  Entonces el referido urgente aparece primero, con badge terracotta y el texto de urgencia
+  Y no hay ningún botón que le impida ignorarlo o posponerlo
 ```
 
-## 7. Preguntas abiertas — necesito tu decisión antes de tasks.md
+## 7. Decisiones (cerradas 2026-08-06)
 
-| # | Pregunta | Opciones |
-|---|----------|----------|
-| ❓1 | ¿El referido pasa a `accepted` al agendar, o recién a `completed` cuando la consulta con el especialista termina? | (a) `accepted` al agendar — más simple, es lo que describe este brief. (b) Dos transiciones: `accepted` al agendar + `completed` al finalizar consulta — más fiel al ciclo de vida real, más trabajo. |
-| ❓2 | ¿Página dedicada `Patient/MyReferrals.vue` o sección embebida en `PatientDashboard.vue`? | Afecta cuánto se toca el dashboard que ya armaste con Antigravity. |
-| ❓3 | ¿Un referido `urgente` necesita algo visualmente distinto más allá del badge (ej. no puede "descartarse" sin agendar)? | Definilo ahora — evita retrabajo de UI después. |
+| # | Pregunta | Decisión | Por qué |
+|---|----------|----------|---------|
+| ❓1 | ¿`accepted` al agendar o `completed` al finalizar consulta? | **(b) Dos transiciones**: `accepted` al agendar, `completed` al firmar la nota del especialista. | El costo real es un `UPDATE` de una línea en `ConsultationFormController::archive()` (ver sección 4) — y demuestra un ciclo de vida completo, más valioso para portfolio que la versión simplificada. Requiere agregar `appointment_id` a `referrals` (sección 3) para que `archive()` sepa qué referido cerrar. |
+| ❓2 | ¿Página dedicada o sección en el dashboard? | **Página dedicada `Patient/MyReferrals.vue`**. | Consistente con el patrón ya establecido por `MyAppointments.vue`. `PatientDashboard.vue` ya tiene 466 líneas (4 StatCards + DataTable + BarChart + AssistantWidget + AlertCard) — meter más ahí lo satura. Una página propia da espacio a tabs, filtros y el deep-link sin comprometer el dashboard. |
+| ❓3 | ¿Tratamiento visual para `urgente`? | **Sí, solo visual — sin bloqueo funcional.** Badge terracotta reutilizando `severity="critical"` de `AlertCard.vue` (misma animación pulsante), orden primero en la lista, copy de urgencia. Sin restricción para descartar/ignorar. | Coherente con lo que ya existe en el design system Salvia — no se inventa un componente nuevo. Bloquear acciones agrega fricción que no corresponde a un proyecto de portfolio. |
 
 ## 8. Fuera del brief pero anotado para más adelante
 

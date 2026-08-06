@@ -72,7 +72,7 @@ final class ReferralController extends Controller
         $user = Auth::user();
         if (!$user) return response()->json(['message' => 'No autenticado.'], 401);
 
-        $query = Referral::with(['consultation', 'referringDoctor', 'patient', 'referredDoctor', 'specialty']);
+        $query = Referral::with(['consultation', 'referringDoctor', 'patient', 'referredDoctor', 'specialty', 'appointment']);
 
         if ($user->role === 'admin') {
             $query->setConnection('pgsql_admin');
@@ -85,6 +85,8 @@ final class ReferralController extends Controller
         if ($request->has('consultation_id')) {
             $query->where('consultation_id', $request->input('consultation_id'));
         }
+
+        $query->orderByRaw("(priority = 'urgente') DESC, created_at ASC");
 
         $referrals = $query->get();
 

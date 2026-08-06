@@ -113,6 +113,12 @@ final class ConsultationFormController extends Controller
             'updated_at' => now(),
         ]);
 
+        // Transition referral accepted → completed when specialist archives the consultation
+        $db->table('referrals')
+            ->where('appointment_id', $consultation->appointment_id)
+            ->where('status', 'accepted')
+            ->update(['status' => 'completed', 'updated_at' => now()]);
+
         // Sign the note
         $db->table('consultation_notes')->where('consultation_id', $consultationId)->update([
             'status' => 'signed',

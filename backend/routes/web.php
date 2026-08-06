@@ -69,6 +69,55 @@ Route::middleware('auth')->group(function () {
     // ─── Vista Paciente ───
     Route::get('/paciente/directorio', fn() => Inertia::render('Patient/DoctorDirectory'))->name('paciente.directorio');
 
+    Route::get('/paciente/referidos', function () {
+        $user = auth()->user();
+        if (!$user) return redirect('/login');
+        $db = \Illuminate\Support\Facades\DB::connection('pgsql_admin');
+
+        $referrals = $db->table('referrals as r')
+            ->leftJoin('users as u_doc', 'u_doc.id', '=', 'r.referring_doctor_id')
+            ->leftJoin('users as u_ref', 'u_ref.id', '=', 'r.referred_doctor_id')
+            ->leftJoin('doctor_profiles as dp', 'dp.user_id', '=', 'r.referred_doctor_id')
+            ->leftJoin('specialties as s', 's.id', '=', 'r.specialty_id')
+            ->leftJoin('appointments as appt', 'appt.id', '=', 'r.appointment_id')
+            ->where('r.patient_id', $user->id)
+            ->orderByRaw("(r.priority = 'urgente') DESC, r.created_at ASC")
+            ->select(
+                'r.id', 'r.specialty_name', 'r.specialty_id',
+                'r.reason', 'r.priority', 'r.status', 'r.notes',
+                'r.referred_doctor_id', 'r.appointment_id', 'r.created_at',
+                'u_doc.name as referring_doctor_name',
+                'u_ref.name as referred_doctor_name',
+                'dp.id as referred_doctor_profile_id',
+                's.name as specialty_catalog_name',
+                'appt.franja_inicio as appointment_start',
+                'appt.status as appointment_status'
+            )
+            ->get()
+            ->map(fn ($r) => [
+                'id' => $r->id,
+                'specialty_name' => $r->specialty_catalog_name ?? $r->specialty_name,
+                'specialty_id' => $r->specialty_id,
+                'reason' => $r->reason,
+                'priority' => $r->priority,
+                'status' => $r->status,
+                'notes' => $r->notes,
+                'referring_doctor' => $r->referring_doctor_name ? ['name' => $r->referring_doctor_name] : null,
+                'referred_doctor' => $r->referred_doctor_name ? ['name' => $r->referred_doctor_name] : null,
+                'referred_doctor_profile_id' => $r->referred_doctor_profile_id,
+                'appointment' => $r->appointment_id ? [
+                    'id' => $r->appointment_id,
+                    'franja_start' => $r->appointment_start,
+                    'status' => $r->appointment_status,
+                ] : null,
+                'created_at' => $r->created_at,
+            ]);
+
+        return Inertia::render('Patient/MyReferrals', [
+            'referrals' => $referrals,
+        ]);
+    })->name('paciente.referidos');
+
     // ─── Vista Médico ───
     Route::middleware('role:doctor,admin')->group(function () {
         Route::get('/doctor/horarios', fn() => Inertia::render('Doctor/MisHorarios'))->name('doctor.horarios');

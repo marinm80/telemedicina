@@ -83,6 +83,7 @@ const page = usePage()
 const user = computed(() => (page.props as any).auth?.user || {})
 const pendingDoctors = computed(() => (page.props as any).pendingDoctors || 0);
 const pendingAppointments = computed(() => (page.props as any).pendingAppointments || 0);
+const pendingReferrals = computed(() => (page.props as any).pendingReferrals || 0);
 
 const isAdmin = computed(() => user.value.role === 'admin')
 const currentRole = ref(user.value.role || 'patient')
@@ -142,6 +143,7 @@ const navItems = computed(() => ({
   patient: [
     { label: 'Directorio Médicos', path: '/paciente/directorio', icon: 'pi-search' },
     { label: 'Mis Citas', path: '/appointments', icon: 'pi-calendar', badge: pendingAppointments.value > 0 ? String(pendingAppointments.value) : '' },
+    { label: 'Mis Referidos', path: '/paciente/referidos', icon: 'pi-directions', badge: pendingReferrals.value > 0 ? String(pendingReferrals.value) : '' },
   ],
   agent: [
     { label: 'Recepción', path: '/admin', icon: 'pi-inbox' },

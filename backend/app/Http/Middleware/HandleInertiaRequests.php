@@ -89,6 +89,14 @@ class HandleInertiaRequests extends Middleware
                     ->whereIn('status', ['pending', 'confirmed'])
                     ->count();
             },
+            'pendingReferrals' => function () use ($request) {
+                if (!$request->user() || $request->user()->role !== 'patient') return 0;
+                return DB::connection('pgsql_admin')
+                    ->table('referrals')
+                    ->where('patient_id', $request->user()->id)
+                    ->where('status', 'pending')
+                    ->count();
+            },
         ];
     }
 }

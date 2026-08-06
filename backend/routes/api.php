@@ -60,6 +60,18 @@ Route::middleware(['web', SetPostgresSessionContext::class])->group(function () 
     Route::post('/referrals', [\App\Http\Controllers\Api\ReferralController::class, 'store']);
     Route::put('/referrals/{id}', [\App\Http\Controllers\Api\ReferralController::class, 'update']);
 
+    // Specialties catalog
+    Route::get('/specialties', function () {
+        $specialties = \Illuminate\Support\Facades\DB::connection('pgsql_admin')
+            ->table('specialties')
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->select('id', 'name')
+            ->get();
+        return response()->json(['data' => $specialties]);
+    });
+
     // Start a consultation (creates record if not exists)
     Route::post('/consultations/{appointmentId}/start', function (\Illuminate\Http\Request $request, string $appointmentId) {
         $user = $request->user();
@@ -138,8 +150,3 @@ Route::middleware(['web', SetPostgresSessionContext::class])->group(function () 
     });
 });
 
-Route::middleware('auth:sanctum')->group(function () {
-    Route::post('/referrals', [\App\Http\Controllers\Api\ReferralController::class, 'store']);
-    Route::get('/referrals', [\App\Http\Controllers\Api\ReferralController::class, 'index']);
-    Route::put('/referrals/{id}', [\App\Http\Controllers\Api\ReferralController::class, 'update']);
-});

@@ -21,7 +21,7 @@ final readonly class BookAppointmentAction
     /**
      * Handle the booking logic of an appointment with database-backed idempotency.
      *
-     * @param  array{patient_id: string, doctor_id: string, franja_inicio: string, franja_fin: string}  $data
+     * @param  array{patient_id: string, doctor_id: string, franja_inicio: string, franja_fin: string, referral_id?: string}  $data
      * @param  string  $idempotencyKey
      * @return \App\Models\Appointment
      *
@@ -60,7 +60,7 @@ final readonly class BookAppointmentAction
                     );
                 }
 
-                return Appointment::create([
+                $appointment = Appointment::create([
                     'patient_id'               => $data['patient_id'],
                     'doctor_id'                => $data['doctor_id'],
                     'franja'                   => $franjaRange,
@@ -68,6 +68,19 @@ final readonly class BookAppointmentAction
                     'idempotency_key'          => $idempotencyKey,
                     'idempotency_payload_hash' => $payloadHash,
                 ]);
+
+                if (!empty($data['referral_id'])) {
+                    DB::connection('pgsql_admin')->table('referrals')
+                        ->where('id', $data['referral_id'])
+                        ->where('status', 'pending')
+                        ->update([
+                            'status' => 'accepted',
+                            'appointment_id' => $appointment->id,
+                            'updated_at' => now(),
+                        ]);
+                }
+
+                return $appointment;
             });
         } catch (QueryException $e) {
             $errorCode = $e->getCode();

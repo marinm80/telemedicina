@@ -22,6 +22,7 @@ class Referral extends Model
         'specialty_id',
         'specialty_name',
         'referred_doctor_id',
+        'appointment_id',
         'reason',
         'priority',
         'status',
@@ -36,6 +37,11 @@ class Referral extends Model
     public function consultation(): BelongsTo
     {
         return $this->belongsTo(Consultation::class);
+    }
+
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class);
     }
 
     public function referringDoctor(): BelongsTo
