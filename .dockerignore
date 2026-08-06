@@ -1,0 +1,13 @@
+.git
+backend/vendor
+backend/node_modules
+backend/storage/logs/*
+backend/.env
+backend/.env.*
+frontend/node_modules
+frontend/.pnpm-store
+docs/*.zip
+docs/rediseno_referencia
+tmp
+specs
+.claude
