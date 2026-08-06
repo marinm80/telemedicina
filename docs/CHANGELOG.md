@@ -5,6 +5,28 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-06 - Filtro Medicina General + Sistema de Referidos
+
+### Añadido
+- **Filtro Medicina General**: El chat siempre dirige al paciente a un médico de Medicina General. El paciente NO elige especialidad — eso lo decide el médico general tras la consulta.
+- **Sistema de Referidos (backend)**: Nueva tabla `referrals` con migración, modelo `Referral`, y `ReferralController` (store, index, update).
+  - Tabla con RLS: política paciente (ver propios), doctor (CRUD propios), admin (todo).
+  - Validación: solo el médico asignado puede crear referidos para su consulta.
+  - Filtros por patient_id y consultation_id en el listado.
+- **Sección "Referir a Especialista" en ConsultationView**: El médico general puede agregar 1+ referidos con especialidad (15 opciones), motivo, prioridad (normal/urgente), y notas.
+- **Rutas API**: GET/POST `/api/referrals`, PUT `/api/referrals/{id}`.
+- **Auto-selección**: Si solo hay 1 médico general disponible, se selecciona automáticamente.
+
+### Cambiado
+- `agentStateMachine.ts`: Estados `TIME_PREFERENCE`, `SUGGEST_PRESENCIAL`, `COLLECT_SYMPTOMS_ONSET` ahora saltan directamente a `SELECT_DOCTOR` (skip `SELECT_SPECIALTY`).
+- `FloatingAssistant.vue`: Eliminada función `selectSpecialty()`, eliminada sección template de `SELECT_SPECIALTY`, `matchingDoctors` auto-filtra a Medicina General.
+- `SELECT_DOCTOR` message: "Te conectaremos con un médico de Medicina General que evaluará tu caso."
+
+### Notas Técnicas
+- La tabla `referrals` usa CHECK constraints para `priority` y `status`.
+- Índices en `patient_id`, `consultation_id`, `referring_doctor_id`.
+- El referido NO auto-crea cita con especialista — el paciente la agenda manualmente.
+
 ## [0.5.0] - 2026-08-06 - Agente Inteligente sin LLM (3 Fases)
 
 ### Añadido

@@ -1198,3 +1198,22 @@ CREATE POLICY prescriptions_policy ON prescriptions
 ```sql
 GRANT SELECT, INSERT, UPDATE ON prescriptions TO app_runtime;
 ```
+
+## Tabla: referrals
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | uuid PK | gen_random_uuid() |
+| consultation_id | uuid FK | Referencia a consultations(id) |
+| referring_doctor_id | uuid FK | Médico que refiere (users.id) |
+| patient_id | uuid FK | Paciente referido (users.id) |
+| specialty_name | varchar(100) | Especialidad destino |
+| referred_doctor_id | uuid FK? | Doctor específico (opcional) |
+| reason | text | Motivo de la referencia |
+| priority | varchar(20) | 'normal' \| 'urgente' |
+| status | varchar(20) | 'pending' \| 'accepted' \| 'completed' \| 'cancelled' |
+| notes | text | Notas adicionales |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**RLS Policies:** patient (SELECT propios), doctor (ALL propios), admin (ALL)
+

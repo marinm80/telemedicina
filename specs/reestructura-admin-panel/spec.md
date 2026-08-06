@@ -211,4 +211,14 @@ And los pacientes ven la nueva disponibilidad
 - Escalado a agente humano
 - Audit logging completo
 
+### RF-REFERIDOS: Filtro Medicina General + Sistema de Referidos (v0.6.0)
+- El chat siempre dirige al paciente a un médico de Medicina General
+- El paciente NO elige especialidad — eso lo decide el médico general
+- Médico general puede referir a 1+ especialistas desde ConsultationView
+- Campos: especialidad (15 opciones), motivo, prioridad (normal/urgente), notas
+- Backend: tabla referrals con RLS, modelo Referral, ReferralController
+- API: GET/POST /api/referrals, PUT /api/referrals/{id}
+- Auto-selección de médico general si solo hay 1 disponible
+
+
 

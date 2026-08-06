@@ -711,4 +711,22 @@ DELETE /api/doctor/schedules/{id}
   → Elimina franja horaria.
 ```
 
+## Referidos (RF-REFERIDOS)
+
+### POST /api/referrals
+- Auth: doctor (solo el médico asignado a la consulta)
+- Body: `{ consultation_id, specialty_name, reason, priority, referred_doctor_id?, notes? }`
+- Response: 201 `{ data: Referral }`
+
+### GET /api/referrals
+- Auth: paciente (ver propios), doctor (ver propios), admin (ver todos)
+- Query: `?patient_id=uuid&consultation_id=uuid`
+- Response: 200 `{ data: Referral[] }`
+
+### PUT /api/referrals/{id}
+- Auth: admin o referring_doctor
+- Body: `{ status: 'pending'|'accepted'|'completed'|'cancelled', notes? }`
+- Response: 200 `{ data: Referral }`
+
+
 
