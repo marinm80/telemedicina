@@ -46,6 +46,11 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 
 COPY backend/ ./
+# Fotos semilla de los médicos ya seedeados: mismo nombre de archivo que
+# el photo_path que se backfillea en doctor_profiles (ver runbook de
+# deploy). Efímero igual que el resto de storage/app/public — sobrevive
+# solo hasta el próximo build, pero eso alcanza para el seed inicial.
+COPY frontend/public/images/doctors/ ./storage/app/public/doctor-photos/
 COPY --from=frontend-build /repo/backend/public/build ./public/build
 # LandingHero.vue referencia estas imágenes con ruta absoluta (/images/...),
 # que el navegador resuelve contra la raíz pública de Laravel — no contra
