@@ -30,9 +30,12 @@ Tras un diagnóstico manual de las 4 vistas de rol (Paciente, Médico, Administr
   - Cada tarjeta de cita usaba `appt.doctor_name` sin condición, sin importar quién la veía. Un médico mirando su propia lista de citas veía su propio nombre (y su propia especialidad) en cada tarjeta — imposible distinguir de qué paciente era cada cita. Mismo problema en el texto del modal de cancelación.
   - Fix: usar el flag `isDoctor` ya existente (gobierna el botón "Atender" y el filtro de pacientes) para elegir `patient_name` cuando quien mira es médico/admin, `doctor_name` en caso contrario. Los pacientes ven exactamente el mismo dato que antes — la rama nueva solo aplica cuando `isDoctor` es verdadero.
 
+- **Enlace muerto "Ver mis recetas" en el dashboard del paciente:** apuntaba a `href="#"`. No existe página de recetas para pacientes, y la sección "Tratamiento actual" del mismo dashboard ya lista las recetas activas completas — se quitó el enlace en vez de inventar un destino.
+
+- **Copy de "sin citas" en Mis Citas pensado solo para pacientes:** `t('history.empty')` decía "Aún no has reservado ninguna cita médica" ("reservar" es acción del paciente) y se mostraba igual para médico/admin/agente. Ahora cada rol ve su propia variante; el paciente ve exactamente el mismo texto que antes.
+
 ### Notas Técnicas
 - Los 5 sub-bugs de "agendar cita" compartían un patrón: cada capa (controller → componente → fetch → policy) estaba documentada correctamente en su propio comentario/`API_CONTRACTS.md`, pero implementada sin seguir esa documentación. Ningún fix requirió cambiar el contrato "oficial" — solo alinear la implementación con lo ya documentado.
-- Pendiente de este diagnóstico (no corregido todavía, reportado al usuario): enlace "Ver mis recetas" del dashboard de paciente con `href=""` (no navega a ningún lado); copy de estado vacío en "Mis Citas" ("Aún no has reservado...") pensado solo para pacientes, se muestra igual para médico/agente.
 
 ## [0.7.0] - 2026-08-06 - Flujo Referidos → Agendamiento
 
