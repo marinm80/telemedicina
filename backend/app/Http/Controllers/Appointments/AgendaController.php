@@ -29,8 +29,7 @@ final class AgendaController extends Controller
             ->select([
                 'id',
                 'day_of_week',
-                DB::raw("lower(franja)::text as start_time"),
-                DB::raw("upper(franja)::text as end_time"),
+                DB::raw("franja::text as franja"),
                 'slot_duration',
             ])
             ->where('doctor_profile_id', $profile->id)
@@ -42,8 +41,7 @@ final class AgendaController extends Controller
             ->select([
                 'id',
                 'blocked_date',
-                DB::raw("lower(franja)::text as start_time"),
-                DB::raw("upper(franja)::text as end_time"),
+                DB::raw("franja::text as franja"),
                 'reason',
             ])
             ->where('doctor_profile_id', $profile->id)
@@ -56,8 +54,8 @@ final class AgendaController extends Controller
                 'status'           => $profile->status,
                 'rejection_reason' => $profile->rejection_reason,
             ],
-            'schedules'       => $schedules,
-            'schedule_blocks' => $scheduleBlocks,
+            'schedules' => $schedules,
+            'blocks'    => $scheduleBlocks,
         ]);
     }
 }
