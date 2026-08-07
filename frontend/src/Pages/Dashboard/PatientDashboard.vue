@@ -240,8 +240,7 @@ const getStatusLabel = (status: string) => {
           <AssistantWidget
             message="Puedo agendar, reprogramar o resolver dudas sobre tu tratamiento. También te recuerdo cuándo renovar tus recetas."
             :actions="[
-              { text: 'Agendar nueva cita', href: '/directory' },
-              { text: 'Ver mis recetas', href: '#' }
+              { text: 'Agendar nueva cita', href: '/directory' }
             ]"
           />
 
