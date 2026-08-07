@@ -35,7 +35,7 @@ const specialties = ref<Specialty[]>([]);
 const showCreateForm = ref(false);
 const saving = ref(false);
 const filterStatus = ref('all');
-const createForm = ref({ name: '', last_name: '', email: '', password: '', timezone: 'America/Santo_Domingo', license_number: '', consultation_fee: 50000, description: '', years_experience: 0, university: '', specialty_ids: [] as string[], status: 'approved' });
+const createForm = ref({ name: '', last_name: '', email: '', password: '', timezone: 'America/Santo_Domingo', license_number: '', consultation_fee: 50, description: '', years_experience: 0, university: '', specialty_ids: [] as string[], status: 'approved' });
 const photoFile = ref<File | null>(null);
 const photoPreview = ref<string | null>(null);
 function onPhotoSelected(e: Event) {
@@ -129,7 +129,7 @@ async function createDoctor() {
     const res = await fetch('/api/admin/doctors', { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf() }, body });
     if (res.ok) {
       successMsg.value = '✅ Médico creado'; showCreateForm.value = false;
-      createForm.value = { name: '', last_name: '', email: '', password: '', timezone: 'America/Santo_Domingo', license_number: '', consultation_fee: 50000, description: '', years_experience: 0, university: '', specialty_ids: [], status: 'approved' };
+      createForm.value = { name: '', last_name: '', email: '', password: '', timezone: 'America/Santo_Domingo', license_number: '', consultation_fee: 50, description: '', years_experience: 0, university: '', specialty_ids: [], status: 'approved' };
       if (photoPreview.value) URL.revokeObjectURL(photoPreview.value);
       photoFile.value = null; photoPreview.value = null;
       await fetchDoctors(); setTimeout(() => successMsg.value = '', 4000);
@@ -249,7 +249,7 @@ function statusClass(s: string) { return { pending: 'badge--warning', approved: 
               <div class="fg"><label>Licencia *</label><input v-model="createForm.license_number" class="fi" /></div>
               <div class="fg"><label>Universidad</label><input v-model="createForm.university" class="fi" /></div>
               <div class="fg"><label>Años exp.</label><input v-model.number="createForm.years_experience" type="number" min="0" class="fi" /></div>
-              <div class="fg"><label>Tarifa</label><input v-model.number="createForm.consultation_fee" type="number" min="0" class="fi" /></div>
+              <div class="fg"><label>Tarifa (USD)</label><input v-model.number="createForm.consultation_fee" type="number" min="0" class="fi" /></div>
             </div>
             <div class="fg" style="margin-top:12px"><label>Especialidades *</label>
               <div class="spec-sel"><button v-for="sp in specialties" :key="sp.id" type="button" :class="['sp-btn', { 'sp-btn--a': createForm.specialty_ids.includes(sp.id) }]" @click="toggleSpec(sp.id)">{{ sp.name }}</button></div>
@@ -370,7 +370,7 @@ function statusClass(s: string) { return { pending: 'badge--warning', approved: 
                   <div class="egrid">
                     <div class="fg"><label>Universidad</label><input v-model="editForm.university" class="fi" /></div>
                     <div class="fg"><label>Años exp.</label><input v-model.number="editForm.years_experience" type="number" min="0" class="fi" /></div>
-                    <div class="fg"><label>Tarifa</label><input v-model.number="editForm.consultation_fee" type="number" min="0" class="fi" /></div>
+                    <div class="fg"><label>Tarifa (USD)</label><input v-model.number="editForm.consultation_fee" type="number" min="0" class="fi" /></div>
                   </div>
                   <div class="fg" style="margin-top:12px"><label>Descripción</label><textarea v-model="editForm.description" class="fi fi-ta" rows="3"></textarea></div>
                 </div>

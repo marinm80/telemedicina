@@ -14,6 +14,7 @@ import DataTable from '@/components/dashboard/DataTable.vue';
 import BarChart from '@/components/dashboard/BarChart.vue';
 import AssistantWidget from '@/components/dashboard/AssistantWidget.vue';
 import AlertCard from '@/components/dashboard/AlertCard.vue';
+import { formatUSD } from '@/lib/currency';
 
 interface Appointment {
   id: string;
@@ -65,10 +66,6 @@ const formatTime = (isoStr: string) => {
   if (!isoStr) return '';
   const date = new Date(isoStr);
   return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-};
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
 const getInitials = (name: string, lastName: string) => {
@@ -125,7 +122,7 @@ const chartData = computed(() => {
         <StatCard
           icon="pi pi-wallet"
           label="Ingresos del mes"
-          :value="formatCurrency(month_earnings)"
+          :value="formatUSD(month_earnings)"
           trend="consultas facturadas"
           trendType="positive"
         />

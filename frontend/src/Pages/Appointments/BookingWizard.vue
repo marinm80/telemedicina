@@ -25,6 +25,7 @@ import ErrorFallback from '@/components/ui/ErrorFallback.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import { getInitials, getAvatarColor } from '@/lib/mockData';
 import { formatInUserTimezone } from '@/lib/timezone';
+import { formatUSD } from '@/lib/currency';
 import {
   validateBooking,
   generateIdempotencyKey,
@@ -270,7 +271,7 @@ function formatSlotTime(iso: string): string {
             <div class="doc-pick__info">
               <span class="doc-pick__name">{{ doc.name }} {{ doc.last_name }}</span>
               <span class="doc-pick__specialty">{{ doc.specialty }}</span>
-              <span class="doc-pick__fee">{{ doc.consultation_fee.toFixed(2) }} USD</span>
+              <span class="doc-pick__fee">{{ formatUSD(doc.consultation_fee) }}</span>
             </div>
             <i class="pi pi-chevron-right doc-pick__arrow" aria-hidden="true" />
           </button>
@@ -370,7 +371,7 @@ function formatSlotTime(iso: string): string {
             <div class="confirm-card__row">
               <span class="confirm-card__label">Tarifa</span>
               <span class="confirm-card__value confirm-card__value--fee">
-                ${{ selectedDoctor?.consultation_fee.toFixed(2) }} USD
+                {{ formatUSD(selectedDoctor?.consultation_fee) }}
               </span>
             </div>
           </div>

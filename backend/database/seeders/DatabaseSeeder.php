@@ -112,7 +112,7 @@ class DatabaseSeeder extends Seeder
                     'university'       => 'Universidad de Chile',
                     'years_experience' => 12,
                     'description'      => 'Especialista en Cardiología y enfermedades cardiovasculares con amplia trayectoria en telemedicina.',
-                    'consultation_fee' => 45000.00,
+                    'consultation_fee' => 45.00,
                     'status'           => 'approved',
                     'approved_at'      => now(),
                     'created_at'       => now(),

@@ -9,6 +9,7 @@ import { ref, computed } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { getInitials, getAvatarColor } from '@/lib/mockData';
+import { formatUSD } from '@/lib/currency';
 
 interface Doctor {
   user_id: string;
@@ -158,7 +159,7 @@ function doctorDisplayName(doc: Doctor): string {
           </div>
           <div v-if="doctor.consultation_fee" class="card__detail">
             <i class="pi pi-dollar" aria-hidden="true" />
-            <span>${{ doctor.consultation_fee.toFixed(2) }} por consulta</span>
+            <span>{{ formatUSD(doctor.consultation_fee) }} por consulta</span>
           </div>
         </div>
 

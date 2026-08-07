@@ -9,6 +9,7 @@ import { computed } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { getInitials, getAvatarColor } from '@/lib/mockData';
+import { formatUSD } from '@/lib/currency';
 
 interface DoctorInfo {
   doctor_profile_id: string;
@@ -53,11 +54,6 @@ const filteredDoctors = computed(() => {
   }
   return result;
 });
-
-function formatCurrency(val: number) {
-  if (!val) return '—';
-  return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(val);
-}
 </script>
 
 <template>
@@ -109,7 +105,7 @@ function formatCurrency(val: number) {
             <div class="doc-card__meta">
               <span v-if="doc.university"><i class="pi pi-building"></i> {{ doc.university }}</span>
               <span v-if="doc.years_experience"><i class="pi pi-clock"></i> {{ doc.years_experience }} años exp.</span>
-              <span v-if="doc.consultation_fee"><i class="pi pi-wallet"></i> {{ formatCurrency(doc.consultation_fee) }}</span>
+              <span v-if="doc.consultation_fee"><i class="pi pi-wallet"></i> {{ formatUSD(doc.consultation_fee) }}</span>
             </div>
           </div>
         </div>

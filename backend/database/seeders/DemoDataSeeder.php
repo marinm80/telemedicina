@@ -56,7 +56,7 @@ class DemoDataSeeder extends Seeder
                     'timezone' => 'America/Argentina/Buenos_Aires',
                     'specialties' => ['Cardiología'],
                     'franja' => '[08:00:00,17:00:00)',
-                    'fee' => 75000, 'exp' => 15, 'uni' => 'Universidad de Buenos Aires',
+                    'fee' => 75, 'exp' => 15, 'uni' => 'Universidad de Buenos Aires',
                 ],
                 [
                     'name' => 'Alejandro', 'last_name' => 'Ruiz',
@@ -64,7 +64,7 @@ class DemoDataSeeder extends Seeder
                     'timezone' => 'America/Tegucigalpa',
                     'specialties' => ['Dermatología'],
                     'franja' => '[10:00:00,18:00:00)',
-                    'fee' => 60000, 'exp' => 8, 'uni' => 'Universidad Nacional Autónoma de Honduras',
+                    'fee' => 60, 'exp' => 8, 'uni' => 'Universidad Nacional Autónoma de Honduras',
                 ],
                 [
                     'name' => 'Lucía', 'last_name' => 'Fernández',
@@ -72,7 +72,7 @@ class DemoDataSeeder extends Seeder
                     'timezone' => 'America/Mexico_City',
                     'specialties' => ['Pediatría'],
                     'franja' => '[08:00:00,17:00:00)',
-                    'fee' => 55000, 'exp' => 12, 'uni' => 'UNAM',
+                    'fee' => 55, 'exp' => 12, 'uni' => 'UNAM',
                 ],
                 [
                     // Dr. Mendoza ya existe — solo agregar schedules faltantes
@@ -83,7 +83,7 @@ class DemoDataSeeder extends Seeder
                     'timezone' => 'America/Bogota',
                     'specialties' => ['Neurología'],
                     'franja' => '[08:00:00,17:00:00)',
-                    'fee' => 80000, 'exp' => 20, 'uni' => 'Universidad Nacional de Colombia',
+                    'fee' => 80, 'exp' => 20, 'uni' => 'Universidad Nacional de Colombia',
                 ],
                 [
                     'name' => 'Ana', 'last_name' => 'Torres',
@@ -91,7 +91,7 @@ class DemoDataSeeder extends Seeder
                     'timezone' => 'America/Santo_Domingo',
                     'specialties' => ['Medicina General', 'Psiquiatría'],
                     'franja' => '[07:00:00,15:00:00)',
-                    'fee' => 45000, 'exp' => 6, 'uni' => 'Universidad Autónoma de Santo Domingo',
+                    'fee' => 45, 'exp' => 6, 'uni' => 'Universidad Autónoma de Santo Domingo',
                 ],
             ];
 

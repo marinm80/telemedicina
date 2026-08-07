@@ -3,6 +3,7 @@ import SpinnerLoader from '@/components/ui/SpinnerLoader.vue';
 import ErrorFallback from '@/components/ui/ErrorFallback.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import { getInitials, getAvatarColor } from '@/lib/mockData';
+import { formatUSD as formatFee } from '@/lib/currency';
 import type { PublicDoctor } from '@/types/public.types';
 
 defineProps<{
@@ -16,14 +17,6 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'bookDoctor', name: string): void;
 }>();
-
-function formatFee(fee: number): string {
-  return new Intl.NumberFormat('es', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-  }).format(fee);
-}
 </script>
 
 <template>

@@ -10,6 +10,7 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue';
 import type { PublicAssistantResponse, PublicAssistantDoctor } from '@/types/api.types';
+import { formatUSD } from '@/lib/currency';
 
 const isOpen = ref(false);
 const query = ref('');
@@ -128,7 +129,7 @@ async function scrollToBottom() {
             <div v-for="doc in msg.doctors" :key="doc.user_id" class="pub-assist__doctor-card">
               <strong>{{ doc.name }}</strong>
               <span>{{ doc.description }}</span>
-              <span class="pub-assist__doctor-fee">${{ doc.consultation_fee }}</span>
+              <span class="pub-assist__doctor-fee">{{ formatUSD(doc.consultation_fee) }}</span>
             </div>
           </div>
         </div>

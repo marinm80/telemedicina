@@ -2,6 +2,7 @@
 import { ref, nextTick } from 'vue';
 import type { PublicAssistantResponse, PublicAssistantDoctor } from '@/types/api.types';
 import { getCsrfToken } from '@/lib/appointmentHelpers';
+import { formatUSD } from '@/lib/currency';
 
 const emit = defineEmits<{
   (e: 'scrollToDirectory'): void;
@@ -262,7 +263,7 @@ async function sendMessage(text: string) {
               specialty: d.description.split(' · ')[0] || 'Médico',
               university: d.description.split(' · ')[1] || 'Universidad',
               years: 'Especialista',
-              price: `$${d.consultation_fee}`
+              price: formatUSD(d.consultation_fee)
             })) : undefined
           });
         } else {
