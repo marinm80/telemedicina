@@ -94,7 +94,29 @@
 
           <!-- Date selection -->
           <div v-if="currentStateId === 'SELECT_DATE'" class="interactive-block">
-            <input type="date" class="date-input" :min="minDate" :max="maxDate" v-model="selectedDate" @change="selectDate" />
+            <DatePicker
+              v-model="selectedDateObj"
+              inline
+              :minDate="minDateObj"
+              :maxDate="maxDateObj"
+              dateFormat="dd/mm/yy"
+              class="booking-calendar"
+              @month-change="onCalendarMonthChange"
+            >
+              <template #date="{ date }">
+                <span
+                  class="cal-day"
+                  :class="{
+                    'cal-day--available': dayStatus[`${date.year}-${String(date.month + 1).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`] === 'available',
+                    'cal-day--full': dayStatus[`${date.year}-${String(date.month + 1).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`] === 'full',
+                  }"
+                >{{ date.day }}</span>
+              </template>
+            </DatePicker>
+            <div class="cal-legend">
+              <span><i class="cal-dot cal-dot--available"></i> Con cupo</span>
+              <span><i class="cal-dot cal-dot--full"></i> Sin cupo</span>
+            </div>
           </div>
 
           <!-- Slot selection -->
@@ -165,6 +187,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, nextTick, watch } from 'vue';
 import { usePage } from '@inertiajs/vue3';
+import DatePicker from 'primevue/datepicker';
 import {
   createStateMachine, createAgentContext, createAuditLog, logAudit,
   detectEmergency,
@@ -240,6 +263,40 @@ const minDate = computed(() => {
 const maxDate = computed(() => {
   const d = new Date(); d.setDate(d.getDate() + 60); return d.toISOString().split('T')[0];
 });
+const minDateObj = computed(() => new Date(minDate.value + 'T00:00:00'));
+const maxDateObj = computed(() => new Date(maxDate.value + 'T00:00:00'));
+
+// ── Calendario: disponibilidad día-por-día (azul = con cupo, rojo = sin cupo) ──
+const dayStatus = ref<Record<string, 'available' | 'full'>>({});
+const selectedDateObj = ref<Date | null>(null);
+const fetchedMonths = new Set<string>();
+
+function formatLocalDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function fetchMonthAvailability(year: number, month0: number) {
+  const monthKey = `${year}-${String(month0 + 1).padStart(2, '0')}`;
+  if (fetchedMonths.has(monthKey) || !agentCtx.bookingData.doctorId) return;
+  fetchedMonths.add(monthKey);
+  try {
+    const res = await fetch(`/api/doctors/${agentCtx.bookingData.doctorId}/month-availability?month=${monthKey}`, {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+    });
+    if (res.ok) {
+      const json = await res.json();
+      dayStatus.value = { ...dayStatus.value, ...(json.days || {}) };
+    }
+  } catch {
+    fetchedMonths.delete(monthKey);
+  }
+}
+
+function onCalendarMonthChange(e: { month: number; year: number }) {
+  // PrimeVue manda month en base 1 en este evento (no en el slot de día).
+  fetchMonthAvailability(e.year, e.month - 1);
+}
 
 // ── Helpers ──
 function addMessage(role: 'assistant' | 'user', text: string, isEmergency = false) {
@@ -416,7 +473,20 @@ function selectDoctor(doc: any) {
   addMessage('user', `👨‍⚕️ ${doc.full_name}`);
   logAudit(auditLog.value, 'SELECT_DOCTOR', 'SELECTED', doc.full_name);
   transitionTo('SELECT_DATE');
+
+  dayStatus.value = {};
+  fetchedMonths.clear();
+  fetchMonthAvailability(minDateObj.value.getFullYear(), minDateObj.value.getMonth());
+  if (maxDateObj.value.getMonth() !== minDateObj.value.getMonth()) {
+    fetchMonthAvailability(maxDateObj.value.getFullYear(), maxDateObj.value.getMonth());
+  }
 }
+
+watch(selectedDateObj, (d) => {
+  if (!d) return;
+  selectedDate.value = formatLocalDate(d);
+  selectDate();
+});
 
 async function selectDate() {
   if (!selectedDate.value) return;
@@ -462,6 +532,7 @@ async function selectDate() {
     addMessage('assistant', '⚠️ No pude consultar la disponibilidad. Intenta con otra fecha.');
     transitionTo('SELECT_DATE');
     selectedDate.value = '';
+      selectedDateObj.value = null;
   }
 }
 
@@ -484,6 +555,7 @@ function selectSlot(slot: SlotInfo) {
       addMessage('assistant', '⏰ <strong>El tiempo de reserva ha expirado.</strong> El horario puede haber sido tomado por otro paciente. Selecciona un nuevo horario.');
       transitionTo('SELECT_DATE');
       selectedDate.value = '';
+      selectedDateObj.value = null;
     }
   }, 1000) as unknown as number;
 
@@ -602,11 +674,13 @@ async function confirmBooking() {
       addMessage('assistant', '⚠️ Ese horario acaba de ser ocupado por otro paciente.');
       transitionTo('SELECT_DATE');
       selectedDate.value = '';
+      selectedDateObj.value = null;
     } else {
       const data = await res.json().catch(() => ({}));
       addMessage('assistant', `⚠️ ${data.message || 'Error al crear la cita'}. Intenta de nuevo.`);
       transitionTo('SELECT_DATE');
       selectedDate.value = '';
+      selectedDateObj.value = null;
     }
   } catch {
     submitting.value = false;
@@ -630,6 +704,7 @@ function escalateToHuman() {
 function restartFlow() {
   Object.assign(agentCtx, createAgentContext(authUser.value?.name));
   selectedDate.value = '';
+      selectedDateObj.value = null;
   availableSlots.value = [];
   currentStateId.value = 'WELCOME';
   messages.value = [];
@@ -766,8 +841,24 @@ watch(messages, () => scrollToBottom(), { deep: true });
 .doctor-info strong { font-size: 0.85rem; color: #111827; }
 .doctor-info small { font-size: 0.75rem; color: #6B7280; }
 
-.date-input { width: 100%; padding: 10px 14px; border: 1px solid #D1D5DB; border-radius: 10px; font-size: 0.9rem; outline: none; }
-.date-input:focus { border-color: var(--color-primary, #0E5D52); }
+.booking-calendar { width: 100%; }
+.booking-calendar :deep(.p-datepicker-panel) { width: 100%; border: 1px solid #E5E7EB; border-radius: 10px; }
+.cal-day {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  width: 100%; height: 100%;
+}
+.cal-day--available::after,
+.cal-day--full::after {
+  content: ''; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+  width: 5px; height: 5px; border-radius: 50%;
+}
+.cal-day--available::after { background: #2563EB; }
+.cal-day--full::after { background: #DC2626; }
+.cal-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 0.72rem; color: #6B7280; }
+.cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.cal-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.cal-dot--available { background: #2563EB; }
+.cal-dot--full { background: #DC2626; }
 
 .slots-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .slot-btn {

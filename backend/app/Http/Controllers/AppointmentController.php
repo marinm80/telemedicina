@@ -14,6 +14,7 @@ use App\Actions\Appointments\BookAppointmentAction;
 use App\Actions\Appointments\CancelAppointmentAction;
 use App\Actions\Appointments\CreateRescheduleRequestAction;
 use App\Actions\Appointments\GetDoctorAvailabilityAction;
+use App\Actions\Appointments\GetDoctorMonthAvailabilityAction;
 use App\Actions\Appointments\RejectRescheduleRequestAction;
 use App\Exceptions\AppointmentNotFoundException;
 use App\Exceptions\InvalidAppointmentStatusException;
@@ -69,6 +70,20 @@ final class AppointmentController extends Controller
         $availability = $action->handle($doctorId, $date);
 
         return response()->json($availability);
+    }
+
+    /**
+     * Estado de disponibilidad día-por-día para un mes completo, usado
+     * para pintar el calendario (azul = con cupo, rojo = sin cupo por
+     * citas y/o bloqueo de agenda).
+     */
+    public function monthAvailability(Request $request, string $doctorId, GetDoctorMonthAvailabilityAction $action): JsonResponse
+    {
+        $month = $request->validate([
+            'month' => ['required', 'date_format:Y-m'],
+        ])['month'];
+
+        return response()->json($action->handle($doctorId, $month));
     }
 
     /**

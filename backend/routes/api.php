@@ -14,6 +14,7 @@ use App\Http\Middleware\SetPostgresSessionContext;
 Route::middleware(['web', SetPostgresSessionContext::class])->group(function () {
     // 1. Endpoint de disponibilidad
     Route::get('/doctors/{id}/availability', [AppointmentController::class, 'availability']);
+    Route::get('/doctors/{id}/month-availability', [AppointmentController::class, 'monthAvailability']);
 
     // 2. Endpoint de reserva, cancelación y reprogramación de citas (RF-09, RF-25, RF-11)
     Route::post('/appointments', [AppointmentController::class, 'store']);
