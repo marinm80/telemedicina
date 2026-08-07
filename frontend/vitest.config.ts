@@ -10,7 +10,11 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
 import viteConfig from './vite.config.ts';
 
-export default mergeConfig(viteConfig, defineConfig({
+const resolvedViteConfig = typeof viteConfig === 'function'
+  ? viteConfig({ command: 'serve', mode: 'test' })
+  : viteConfig;
+
+export default mergeConfig(resolvedViteConfig, defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['src/**/*.test.ts'],
