@@ -23,7 +23,6 @@ Route::middleware(['web', SetPostgresSessionContext::class])->group(function () 
     Route::post('/appointments', [AppointmentController::class, 'store']);
     Route::post('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
     Route::post('/appointments/{id}/reschedule-request', [AppointmentController::class, 'rescheduleRequest']);
-    Route::put('/api/appointments/{id}/reschedule-approve', [AppointmentController::class, 'rescheduleApprove']);
     Route::put('/appointments/{id}/reschedule-approve', [AppointmentController::class, 'rescheduleApprove']);
     Route::put('/appointments/{id}/reschedule-reject', [AppointmentController::class, 'rescheduleReject']);
 
