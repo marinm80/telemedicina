@@ -428,14 +428,14 @@ async function downloadPdf(consultationId: string) {
       >
         <div
           class="appt-card__avatar"
-          :style="{ backgroundColor: getAvatarColor(appt.doctor_name) }"
+          :style="{ backgroundColor: getAvatarColor(isDoctor ? appt.patient_name : appt.doctor_name) }"
         >
-          {{ getInitials(appt.doctor_name) }}
+          {{ getInitials(isDoctor ? appt.patient_name : appt.doctor_name) }}
         </div>
 
         <div class="appt-card__info">
-          <span class="appt-card__doctor">{{ appt.doctor_name }}</span>
-          <span class="appt-card__specialty">{{ appt.doctor_specialty }}</span>
+          <span class="appt-card__doctor">{{ isDoctor ? appt.patient_name : appt.doctor_name }}</span>
+          <span v-if="!isDoctor" class="appt-card__specialty">{{ appt.doctor_specialty }}</span>
           <span class="appt-card__datetime">
             <i class="pi pi-calendar" aria-hidden="true" />
             {{ formatDate(appt.franja_start) }}
@@ -518,8 +518,8 @@ async function downloadPdf(consultationId: string) {
         <template v-else>
           <h3 id="cancel-modal-title" class="cancel-modal__title">Cancelar Cita</h3>
           <p class="cancel-modal__desc">
-            ¿Estás seguro de cancelar tu cita con
-            <strong>{{ cancelTarget.doctor_name }}</strong>?
+            ¿Estás seguro de cancelar la cita con
+            <strong>{{ isDoctor ? cancelTarget.patient_name : cancelTarget.doctor_name }}</strong>?
           </p>
           <p class="cancel-modal__refund-info">
             <i class="pi pi-info-circle" aria-hidden="true" />
