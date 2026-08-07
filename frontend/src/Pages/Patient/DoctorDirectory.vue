@@ -11,10 +11,9 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { getInitials, getAvatarColor } from '@/lib/mockData';
 
 interface DoctorInfo {
-  profile_id: string;
+  doctor_profile_id: string;
   user_id: string;
-  name: string;
-  last_name: string;
+  full_name: string;
   specialties: string[];
   university: string;
   years_experience: number;
@@ -24,17 +23,10 @@ interface DoctorInfo {
 
 const page = usePage();
 const booking = computed(() => (page.props as any)?.booking || {});
-const doctors = computed<DoctorInfo[]>(() => {
-  const raw = booking.value?.doctors || [];
-  const specs = booking.value?.specialties || [];
-  return raw.map((d: any) => ({
-    ...d,
-    specialties: (d.specialty_ids || []).map((sid: string) => {
-      const s = specs.find((sp: any) => sp.id === sid);
-      return s ? s.name : '';
-    }).filter(Boolean),
-  }));
-});
+// booking.doctors (shared en HandleInertiaRequests::share()) ya manda
+// full_name armado y specialties como array de nombres resueltos — no
+// hace falta (ni existe) specialty_ids para volver a resolverlos acá.
+const doctors = computed<DoctorInfo[]>(() => booking.value?.doctors || []);
 
 const searchQuery = ref('');
 const filterSpec = ref('all');
@@ -54,7 +46,7 @@ const filteredDoctors = computed(() => {
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase();
     result = result.filter(d =>
-      `${d.name} ${d.last_name}`.toLowerCase().includes(q) ||
+      d.full_name.toLowerCase().includes(q) ||
       d.specialties.some(s => s.toLowerCase().includes(q))
     );
   }
@@ -97,13 +89,13 @@ function formatCurrency(val: number) {
 
       <!-- Cards -->
       <div v-else class="doc-grid">
-        <div v-for="doc in filteredDoctors" :key="doc.profile_id" class="doc-card">
+        <div v-for="doc in filteredDoctors" :key="doc.doctor_profile_id" class="doc-card">
           <div class="doc-card__top">
-            <div class="doc-card__avatar" :style="{ backgroundColor: getAvatarColor(doc.name + ' ' + doc.last_name) }">
-              {{ getInitials(doc.name + ' ' + doc.last_name) }}
+            <div class="doc-card__avatar" :style="{ backgroundColor: getAvatarColor(doc.full_name) }">
+              {{ getInitials(doc.full_name) }}
             </div>
             <div class="doc-card__info">
-              <h3 class="doc-card__name">Dr(a). {{ doc.name }} {{ doc.last_name }}</h3>
+              <h3 class="doc-card__name">Dr(a). {{ doc.full_name }}</h3>
               <div class="doc-card__specs">
                 <span v-for="spec in doc.specialties" :key="spec" class="spec-tag">{{ spec }}</span>
               </div>
