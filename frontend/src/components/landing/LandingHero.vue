@@ -347,7 +347,7 @@ function handleSearch() {
       <div class="absolute inset-y-0 right-0 -bottom-3.5 -right-3.5 w-[62%] h-[74%] rounded-3xl rounded-tr-[120px] bg-salvia-badge -z-10"></div>
       <div class="relative flex flex-col gap-4">
         <!-- Tiny visual avatars -->
-        <div class="flex gap-3 items-stretch h-40">
+        <div class="flex gap-3 items-stretch h-64">
           <div class="flex-1 h-full rounded-3xl rounded-bl-[90px] overflow-hidden">
             <img src="/images/hero-doctor.jpg" alt="Doctora Salvia" class="w-full h-full object-cover" />
           </div>

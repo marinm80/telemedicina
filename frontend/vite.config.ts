@@ -3,6 +3,14 @@ import vue from '@vitejs/plugin-vue';
 import path from 'path';
 
 export default defineConfig({
+  // Laravel sirve el build compilado desde /build/, no desde la raíz del
+  // sitio. Sin esto, Vite asume base:'/' y las url() generadas para
+  // assets referenciados desde CSS (p.ej. @font-face de primeicons)
+  // quedan como /assets/... en vez de /build/assets/..., y 404ean —
+  // los íconos se ven como el glifo de "carácter desconocido" del
+  // navegador. Los <script>/<link> de entrada no se ven afectados:
+  // esos los resuelve @vite() de Laravel leyendo el manifest, no esto.
+  base: '/build/',
   plugins: [vue()],
   resolve: {
     alias: {

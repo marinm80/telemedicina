@@ -137,7 +137,7 @@ function formatCurrency(val: number) {
 
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 3rem; color: #6B7280; }
 
-.doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
+.doc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
 
 .doc-card {
   background: #FFF; border: 1px solid #E5E7EB; border-radius: 14px;

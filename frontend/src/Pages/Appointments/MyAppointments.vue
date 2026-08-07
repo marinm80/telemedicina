@@ -1,7 +1,7 @@
 <!--
   ====================================================================
-  MyAppointments â€” Mis Citas (Paciente)
-  AUTHOR: Rafael MarÃ­n Â· PORTFOLIO: https://rafaelmarin.dev
+  MyAppointments — Mis Citas (Paciente)
+  AUTHOR: Rafael Marín · PORTFOLIO: https://rafaelmarin.dev
   ====================================================================
 -->
 <script setup lang="ts">
@@ -149,7 +149,7 @@ function statusBorderColor(status: string): string {
   return map[status] ?? 'var(--color-surface-200)';
 }
 
-// â”€â”€ CancelaciÃ³n RF-25 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Cancelación RF-25 ──────────────────────────────────────────────────
 const cancelTarget = ref<any | null>(null);
 const cancelReason = ref('');
 const cancelSubmitting = ref(false);
@@ -210,13 +210,13 @@ async function submitCancel() {
       cancelError.value = 'Error inesperado. Intenta nuevamente.';
     }
   } catch {
-    cancelError.value = 'Error de red. Verifica tu conexiÃ³n.';
+    cancelError.value = 'Error de red. Verifica tu conexión.';
   } finally {
     cancelSubmitting.value = false;
   }
 }
 
-// â”€â”€ ReprogramaciÃ³n RF-11 Solicitud y AprobaciÃ³n de ReprogramaciÃ³n â”€â”€â”€â”€â”€â”€
+// ── Reprogramación RF-11 Solicitud y Aprobación de Reprogramación ──────
 const rescheduleTarget = ref<any | null>(null);
 const rescheduleStart = ref('');
 const rescheduleEnd = ref('');
@@ -240,9 +240,17 @@ function closeRescheduleModal() {
 
 function onRescheduleStartChange() {
   if (rescheduleStart.value) {
+    // rescheduleStart viene de un <input type="datetime-local">: es hora
+    // LOCAL sin offset. toISOString() convierte a UTC — si después se
+    // recortan los últimos caracteres para simular el mismo formato
+    // "sin zona", el valor guardado queda en UTC pero se relee como si
+    // fuera local, desplazando el fin por el offset de la zona del
+    // usuario. Se arma el string a mano con getters locales para evitar
+    // ese viaje de ida y vuelta por UTC.
     const start = new Date(rescheduleStart.value);
     const end = new Date(start.getTime() + 30 * 60_000);
-    rescheduleEnd.value = end.toISOString().slice(0, 16);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    rescheduleEnd.value = `${end.getFullYear()}-${pad(end.getMonth() + 1)}-${pad(end.getDate())}T${pad(end.getHours())}:${pad(end.getMinutes())}`;
   }
 }
 
@@ -285,18 +293,18 @@ async function submitReschedule() {
       rescheduleError.value = 'No se puede reprogramar esta cita en su estado actual.';
     } else if (res.status === 422) {
       const json = await res.json();
-      rescheduleError.value = json.message ?? 'Error de validaciÃ³n.';
+      rescheduleError.value = json.message ?? 'Error de validación.';
     } else {
       rescheduleError.value = 'Error inesperado. Intenta nuevamente.';
     }
   } catch {
-    rescheduleError.value = 'Error de red. Verifica tu conexiÃ³n.';
+    rescheduleError.value = 'Error de red. Verifica tu conexión.';
   } finally {
     rescheduleSubmitting.value = false;
   }
 }
 
-// â”€â”€ Acuse de recibo RF-19 Acuse de Recibo de Paciente â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Acuse de recibo RF-19 Acuse de Recibo de Paciente ──────────────────
 const acknowledgeLoading = ref<string | null>(null);
 const acknowledgeError = ref('');
 
@@ -318,7 +326,7 @@ async function acknowledgeNote(appointmentId: string, consultationId: string) {
       // Marcar la cita como acusada localmente
       router.reload({ only: ['appointments'] });
     } else if (res.status === 422) {
-      acknowledgeError.value = 'La nota aÃºn estÃ¡ en borrador.';
+      acknowledgeError.value = 'La nota aún está en borrador.';
     } else {
       acknowledgeError.value = 'Error al acusar recibo.';
     }
@@ -329,7 +337,7 @@ async function acknowledgeNote(appointmentId: string, consultationId: string) {
   }
 }
 
-// â”€â”€ Descarga de PDF RF-18 GeneraciÃ³n de PDF y QR ClÃ­nico â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Descarga de PDF RF-18 Generación de PDF y QR Clínico ───────────────
 const pdfLoading = ref<string | null>(null);
 const pdfError = ref('');
 
@@ -352,7 +360,7 @@ async function downloadPdf(consultationId: string) {
       a.click();
       URL.revokeObjectURL(url);
     } else if (res.status === 425) {
-      pdfError.value = 'El PDF estÃ¡ generÃ¡ndose. Intenta en unos segundos.';
+      pdfError.value = 'El PDF está generándose. Intenta en unos segundos.';
     } else {
       pdfError.value = 'Error al descargar el PDF.';
     }
@@ -400,14 +408,14 @@ async function downloadPdf(consultationId: string) {
       </span>
     </div>
 
-    <!-- Estado: vacÃ­o -->
+    <!-- Estado: vacío -->
     <div v-if="props.appointments.length === 0" style="padding: 2rem; text-align: center; color: var(--color-text-muted);">
       <p>{{ t('history.empty') }}</p>
     </div>
 
     <!-- Sin resultados en el filtro activo -->
     <div v-else-if="filteredAppointments.length === 0" style="padding: 2rem; text-align: center; color: var(--color-text-muted);">
-      <p>No hay citas en esta categorÃ­a.</p>
+      <p>No hay citas en esta categoría.</p>
     </div>
 
     <!-- Estado: listo -->
@@ -431,7 +439,7 @@ async function downloadPdf(consultationId: string) {
           <span class="appt-card__datetime">
             <i class="pi pi-calendar" aria-hidden="true" />
             {{ formatDate(appt.franja_start) }}
-            Â· {{ formatTime(appt.franja_start) }} â€“ {{ formatTime(appt.franja_end) }}
+            · {{ formatTime(appt.franja_start) }} – {{ formatTime(appt.franja_end) }}
           </span>
         </div>
 
@@ -491,7 +499,7 @@ async function downloadPdf(consultationId: string) {
       </div>
     </div>
 
-    <!-- Modal de cancelaciÃ³n -->
+    <!-- Modal de cancelación -->
     <div v-if="cancelTarget" class="cancel-overlay" @click.self="closeCancelModal">
       <div class="cancel-modal" role="dialog" aria-labelledby="cancel-modal-title">
         <!-- Resultado exitoso -->
@@ -510,12 +518,12 @@ async function downloadPdf(consultationId: string) {
         <template v-else>
           <h3 id="cancel-modal-title" class="cancel-modal__title">Cancelar Cita</h3>
           <p class="cancel-modal__desc">
-            Â¿EstÃ¡s seguro de cancelar tu cita con
+            ¿Estás seguro de cancelar tu cita con
             <strong>{{ cancelTarget.doctor_name }}</strong>?
           </p>
           <p class="cancel-modal__refund-info">
             <i class="pi pi-info-circle" aria-hidden="true" />
-            Si cancelas con mÃ¡s de 24h de anticipaciÃ³n, recibirÃ¡s un reembolso completo.
+            Si cancelas con más de 24h de anticipación, recibirás un reembolso completo.
           </p>
 
           <div v-if="cancelError" class="cancel-modal__error" role="alert">
@@ -549,7 +557,7 @@ async function downloadPdf(consultationId: string) {
               <i v-if="cancelSubmitting" class="pi pi-spin pi-spinner" aria-hidden="true" />
               <template v-else>
                 <i class="pi pi-times" aria-hidden="true" />
-                Confirmar CancelaciÃ³n
+                Confirmar Cancelación
               </template>
             </button>
           </div>
@@ -557,14 +565,14 @@ async function downloadPdf(consultationId: string) {
       </div>
     </div>
 
-    <!-- Modal de reprogramaciÃ³n RF-11 -->
+    <!-- Modal de reprogramación RF-11 -->
     <div v-if="rescheduleTarget" class="cancel-overlay" @click.self="closeRescheduleModal">
       <div class="cancel-modal" role="dialog" aria-labelledby="reschedule-modal-title">
         <!-- Resultado exitoso -->
         <div v-if="rescheduleResult" class="cancel-modal__success">
           <i class="pi pi-check-circle cancel-modal__success-icon" aria-hidden="true" />
-          <h3>Â¡Solicitud Enviada!</h3>
-          <p>Tu mÃ©dico revisarÃ¡ la solicitud de reprogramaciÃ³n.</p>
+          <h3>¡Solicitud Enviada!</h3>
+          <p>Tu médico revisará la solicitud de reprogramación.</p>
           <p class="cancel-modal__refund-text">ID de solicitud: {{ rescheduleResult.id }}</p>
           <button type="button" class="cancel-modal__close-btn" @click="closeRescheduleModal">Cerrar</button>
         </div>
@@ -588,7 +596,7 @@ async function downloadPdf(consultationId: string) {
           </div>
 
           <div class="cancel-modal__field">
-            <label for="reschedule-reason" class="cancel-modal__label">Motivo de reprogramaciÃ³n</label>
+            <label for="reschedule-reason" class="cancel-modal__label">Motivo de reprogramación</label>
             <textarea
               id="reschedule-reason"
               v-model="rescheduleReason"

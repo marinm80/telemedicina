@@ -90,7 +90,7 @@ Route::middleware('auth')->group(function () {
                 'u_ref.name as referred_doctor_name',
                 'dp.id as referred_doctor_profile_id',
                 's.name as specialty_catalog_name',
-                'appt.franja_inicio as appointment_start',
+                \Illuminate\Support\Facades\DB::raw('lower(appt.franja) as appointment_start'),
                 'appt.status as appointment_status'
             )
             ->get()
