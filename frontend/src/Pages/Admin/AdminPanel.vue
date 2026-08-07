@@ -432,7 +432,7 @@ function statusClass(s: string) { return { pending: 'badge--warning', approved: 
 .fg label { font-size:.78rem; font-weight:600; color:#374151; }
 .fg--photo { margin-bottom:14px; }
 .photo-picker { display:flex; align-items:center; gap:14px; }
-.photo-picker__preview { width:60px; height:60px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+.photo-picker__preview { width:60px; height:60px; border-radius:50%; object-fit:cover; object-position:top; flex-shrink:0; }
 .photo-picker__placeholder { width:60px; height:60px; border-radius:50%; background:#F3F4F6; color:#9CA3AF; display:flex; align-items:center; justify-content:center; font-size:1.3rem; flex-shrink:0; }
 .fi { padding:7px 10px; border:1px solid #D1D5DB; border-radius:8px; font-size:.88rem; outline:none; }
 .fi:focus { border-color:var(--color-primary,#0E5D52); }
@@ -454,7 +454,7 @@ function statusClass(s: string) { return { pending: 'badge--warning', approved: 
 .dcard--rejected { border-left:4px solid #EF4444; }
 .dcard__top { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
 .dcard__av { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#FFF; font-weight:700; font-size:.82rem; flex-shrink:0; }
-.dcard__av--photo { object-fit:cover; }
+.dcard__av--photo { object-fit:cover; object-position:top; }
 .dcard__info { flex:1; }
 .dcard__info h3 { margin:0; font-size:.95rem; font-weight:600; color:#111827; }
 .dcard__email { font-size:.78rem; color:#6B7280; }

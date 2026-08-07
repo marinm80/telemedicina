@@ -54,12 +54,12 @@ function formatFee(fee: number): string {
           class="bg-white border border-salvia-cardBorder rounded-3xl overflow-hidden flex flex-col transition-all duration-300 hover:translate-y-[-4px] hover:shadow-lg"
         >
           <!-- Foto si existe, si no banner de iniciales -->
-          <div class="h-44 flex items-center justify-center relative overflow-hidden" :style="!doctor.photo_url ? { backgroundColor: getAvatarColor(`${doctor.name} ${doctor.last_name}`) + '22' } : {}">
+          <div class="h-60 flex items-center justify-center relative overflow-hidden" :style="!doctor.photo_url ? { backgroundColor: getAvatarColor(`${doctor.name} ${doctor.last_name}`) + '22' } : {}">
             <img
               v-if="doctor.photo_url"
               :src="doctor.photo_url"
               :alt="`${doctor.name} ${doctor.last_name}`"
-              class="w-full h-full object-cover"
+              class="w-full h-full object-cover object-top"
             />
             <div
               v-else

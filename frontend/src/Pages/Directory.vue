@@ -322,7 +322,7 @@ function doctorDisplayName(doc: Doctor): string {
   font-weight: var(--font-bold);
   flex-shrink: 0;
 }
-.card__avatar--photo { object-fit: cover; }
+.card__avatar--photo { object-fit: cover; object-position: top; }
 
 .card__info {
   display: flex;

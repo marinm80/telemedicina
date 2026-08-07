@@ -155,7 +155,7 @@ function formatCurrency(val: number) {
   align-items: center; justify-content: center; color: #FFF;
   font-weight: 700; font-size: 0.95rem; flex-shrink: 0;
 }
-.doc-card__avatar--photo { object-fit: cover; }
+.doc-card__avatar--photo { object-fit: cover; object-position: top; }
 .doc-card__info { flex: 1; min-width: 0; }
 .doc-card__name { margin: 0 0 4px; font-size: 1rem; font-weight: 600; color: #111827; }
 
