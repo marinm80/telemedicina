@@ -14,6 +14,7 @@ interface DoctorInfo {
   doctor_profile_id: string;
   user_id: string;
   full_name: string;
+  photo_url: string | null;
   specialties: string[];
   university: string;
   years_experience: number;
@@ -91,7 +92,8 @@ function formatCurrency(val: number) {
       <div v-else class="doc-grid">
         <div v-for="doc in filteredDoctors" :key="doc.doctor_profile_id" class="doc-card">
           <div class="doc-card__top">
-            <div class="doc-card__avatar" :style="{ backgroundColor: getAvatarColor(doc.full_name) }">
+            <img v-if="doc.photo_url" :src="doc.photo_url" :alt="doc.full_name" class="doc-card__avatar doc-card__avatar--photo" />
+            <div v-else class="doc-card__avatar" :style="{ backgroundColor: getAvatarColor(doc.full_name) }">
               {{ getInitials(doc.full_name) }}
             </div>
             <div class="doc-card__info">
@@ -153,6 +155,7 @@ function formatCurrency(val: number) {
   align-items: center; justify-content: center; color: #FFF;
   font-weight: 700; font-size: 0.95rem; flex-shrink: 0;
 }
+.doc-card__avatar--photo { object-fit: cover; }
 .doc-card__info { flex: 1; min-width: 0; }
 .doc-card__name { margin: 0 0 4px; font-size: 1rem; font-weight: 600; color: #111827; }
 

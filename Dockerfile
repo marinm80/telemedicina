@@ -53,9 +53,15 @@ COPY --from=frontend-build /repo/backend/public/build ./public/build
 # import en build time; acá las duplicamos donde Apache realmente las sirve.
 COPY --from=frontend-build /repo/backend/public/build/images ./public/images
 
+# storage:link acá (build time) alcanza para que el symlink exista —
+# no necesita nada del entorno de runtime. Lo que SÍ depende del entorno:
+# storage/app/public es efímero en cada redeploy salvo que se monte un
+# volumen persistente en Coolify sobre esa ruta. Sin volumen, las fotos
+# subidas por el admin sobreviven hasta el próximo deploy, no más.
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress \
     && cp .env.example .env \
-    && chown -R www-data:www-data storage bootstrap/cache \
+    && php artisan storage:link \
+    && chown -R www-data:www-data storage bootstrap/cache public/storage \
     && chmod -R ug+rwX storage bootstrap/cache
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh

@@ -21,6 +21,7 @@ interface Doctor {
   years_experience: number | null;
   university: string | null;
   specialties: string[];
+  photo_url: string | null;
 }
 
 interface Specialty {
@@ -132,7 +133,9 @@ function doctorDisplayName(doc: Doctor): string {
     <div v-else class="directory__grid">
       <div v-for="doctor in filteredDoctors" :key="doctor.doctor_profile_id" class="card">
         <div class="card__header">
+          <img v-if="doctor.photo_url" :src="doctor.photo_url" :alt="doctorDisplayName(doctor)" class="card__avatar card__avatar--photo" />
           <div
+            v-else
             class="card__avatar"
             :style="{ backgroundColor: getAvatarColor(doctorDisplayName(doctor)) }"
           >
@@ -319,6 +322,7 @@ function doctorDisplayName(doc: Doctor): string {
   font-weight: var(--font-bold);
   flex-shrink: 0;
 }
+.card__avatar--photo { object-fit: cover; }
 
 .card__info {
   display: flex;

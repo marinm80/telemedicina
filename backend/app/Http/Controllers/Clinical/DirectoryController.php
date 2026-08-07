@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -59,6 +60,7 @@ final class DirectoryController extends Controller
                 'years_experience'  => $doc->years_experience,
                 'university'        => $doc->university,
                 'specialties'       => $specialtiesList,
+                'photo_url'         => $doc->photo_path ? Storage::disk('public')->url($doc->photo_path) : null,
             ];
         });
 
@@ -96,6 +98,7 @@ final class DirectoryController extends Controller
                     'years_experience'  => $doc->years_experience,
                     'consultation_fee'  => (float) $doc->consultation_fee,
                     'specialty'         => $specialty ?? 'Medicina General',
+                    'photo_url'         => $doc->photo_path ? Storage::disk('public')->url($doc->photo_path) : null,
                 ];
             });
 

@@ -54,11 +54,12 @@ class HandleInertiaRequests extends Middleware
                     ->orderBy('name')
                     ->get(['id', 'name']),
                 'doctors' => \DB::connection('pgsql_admin')->table('v_doctor_directory')
-                    ->get(['doctor_profile_id', 'user_id', 'name', 'last_name'])
+                    ->get(['doctor_profile_id', 'user_id', 'name', 'last_name', 'photo_path'])
                     ->map(fn ($d) => [
                         'doctor_profile_id' => $d->doctor_profile_id,
                         'user_id'           => $d->user_id,
                         'full_name'         => trim("{$d->name} {$d->last_name}"),
+                        'photo_url'         => $d->photo_path ? \Illuminate\Support\Facades\Storage::disk('public')->url($d->photo_path) : null,
                         'specialties'       => \DB::connection('pgsql_admin')->table('doctor_specialties')
                             ->join('specialties', 'specialties.id', '=', 'doctor_specialties.specialty_id')
                             ->where('doctor_specialties.doctor_profile_id', $d->doctor_profile_id)

@@ -17,7 +17,7 @@ interface Doctor {
   email: string; timezone: string; status: string; consultation_fee: number;
   description: string; years_experience: number; university: string;
   license_number: string; specialties: string[]; specialty_ids: string[];
-  created_at: string;
+  created_at: string; photo_url: string | null;
 }
 interface Specialty { id: string; name: string; }
 interface UserInfo { id: string; name: string; last_name: string; email: string; timezone: string; role: string; created_at: string; }
@@ -36,6 +36,14 @@ const showCreateForm = ref(false);
 const saving = ref(false);
 const filterStatus = ref('all');
 const createForm = ref({ name: '', last_name: '', email: '', password: '', timezone: 'America/Santo_Domingo', license_number: '', consultation_fee: 50000, description: '', years_experience: 0, university: '', specialty_ids: [] as string[], status: 'approved' });
+const photoFile = ref<File | null>(null);
+const photoPreview = ref<string | null>(null);
+function onPhotoSelected(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+  photoFile.value = file;
+  if (photoPreview.value) URL.revokeObjectURL(photoPreview.value);
+  photoPreview.value = file ? URL.createObjectURL(file) : null;
+}
 
 // Edit modal
 const editModal = ref(false);
@@ -106,8 +114,26 @@ async function createDoctor() {
   if (!createForm.value.name || !createForm.value.email || createForm.value.specialty_ids.length === 0) { error.value = 'Completa los campos obligatorios'; return; }
   saving.value = true; error.value = '';
   try {
-    const res = await fetch('/api/admin/doctors', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf() }, body: JSON.stringify(createForm.value) });
-    if (res.ok) { successMsg.value = '✅ Médico creado'; showCreateForm.value = false; createForm.value = { name: '', last_name: '', email: '', password: '', timezone: 'America/Santo_Domingo', license_number: '', consultation_fee: 50000, description: '', years_experience: 0, university: '', specialty_ids: [], status: 'approved' }; await fetchDoctors(); setTimeout(() => successMsg.value = '', 4000); }
+    // FormData, no JSON: hay un archivo. No se fija Content-Type a mano
+    // — el navegador pone el boundary de multipart solo si se lo deja.
+    const body = new FormData();
+    for (const [key, value] of Object.entries(createForm.value)) {
+      if (key === 'specialty_ids') {
+        (value as string[]).forEach((id) => body.append('specialty_ids[]', id));
+      } else if (value !== null && value !== undefined) {
+        body.append(key, String(value));
+      }
+    }
+    if (photoFile.value) body.append('photo', photoFile.value);
+
+    const res = await fetch('/api/admin/doctors', { method: 'POST', credentials: 'same-origin', headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf() }, body });
+    if (res.ok) {
+      successMsg.value = '✅ Médico creado'; showCreateForm.value = false;
+      createForm.value = { name: '', last_name: '', email: '', password: '', timezone: 'America/Santo_Domingo', license_number: '', consultation_fee: 50000, description: '', years_experience: 0, university: '', specialty_ids: [], status: 'approved' };
+      if (photoPreview.value) URL.revokeObjectURL(photoPreview.value);
+      photoFile.value = null; photoPreview.value = null;
+      await fetchDoctors(); setTimeout(() => successMsg.value = '', 4000);
+    }
     else { const d = await res.json().catch(() => ({})); error.value = d.message || 'Error'; }
   } catch (e: any) { error.value = e.message; } finally { saving.value = false; }
 }
@@ -207,6 +233,14 @@ function statusClass(s: string) { return { pending: 'badge--warning', approved: 
         <Transition name="slide-down">
           <div v-if="showCreateForm" class="form-card">
             <h3>Registrar Nuevo Médico</h3>
+            <div class="fg fg--photo">
+              <label>Foto de perfil</label>
+              <div class="photo-picker">
+                <img v-if="photoPreview" :src="photoPreview" alt="Vista previa" class="photo-picker__preview" />
+                <div v-else class="photo-picker__placeholder"><i class="pi pi-user"></i></div>
+                <input type="file" accept="image/*" class="fi" @change="onPhotoSelected" />
+              </div>
+            </div>
             <div class="form-grid">
               <div class="fg"><label>Nombre *</label><input v-model="createForm.name" class="fi" /></div>
               <div class="fg"><label>Apellido *</label><input v-model="createForm.last_name" class="fi" /></div>
@@ -230,7 +264,8 @@ function statusClass(s: string) { return { pending: 'badge--warning', approved: 
         <div v-else class="doc-list">
           <div v-for="doc in filteredDoctors" :key="doc.profile_id" :class="['dcard', `dcard--${doc.status}`]">
             <div class="dcard__top">
-              <div class="dcard__av" :style="{ background: getAvatarColor(doc.name+' '+doc.last_name) }">{{ getInitials(doc.name+' '+doc.last_name) }}</div>
+              <img v-if="doc.photo_url" :src="doc.photo_url" :alt="doc.name+' '+doc.last_name" class="dcard__av dcard__av--photo" />
+              <div v-else class="dcard__av" :style="{ background: getAvatarColor(doc.name+' '+doc.last_name) }">{{ getInitials(doc.name+' '+doc.last_name) }}</div>
               <div class="dcard__info">
                 <h3>{{ doc.name }} {{ doc.last_name }}</h3>
                 <span class="dcard__email">{{ doc.email }}</span>
@@ -395,6 +430,10 @@ function statusClass(s: string) { return { pending: 'badge--warning', approved: 
 .form-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:1rem; }
 .fg { display:flex; flex-direction:column; gap:4px; }
 .fg label { font-size:.78rem; font-weight:600; color:#374151; }
+.fg--photo { margin-bottom:14px; }
+.photo-picker { display:flex; align-items:center; gap:14px; }
+.photo-picker__preview { width:60px; height:60px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+.photo-picker__placeholder { width:60px; height:60px; border-radius:50%; background:#F3F4F6; color:#9CA3AF; display:flex; align-items:center; justify-content:center; font-size:1.3rem; flex-shrink:0; }
 .fi { padding:7px 10px; border:1px solid #D1D5DB; border-radius:8px; font-size:.88rem; outline:none; }
 .fi:focus { border-color:var(--color-primary,#0E5D52); }
 .fi-sm { padding:5px 8px; font-size:.82rem; max-width:120px; }
@@ -415,6 +454,7 @@ function statusClass(s: string) { return { pending: 'badge--warning', approved: 
 .dcard--rejected { border-left:4px solid #EF4444; }
 .dcard__top { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
 .dcard__av { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#FFF; font-weight:700; font-size:.82rem; flex-shrink:0; }
+.dcard__av--photo { object-fit:cover; }
 .dcard__info { flex:1; }
 .dcard__info h3 { margin:0; font-size:.95rem; font-weight:600; color:#111827; }
 .dcard__email { font-size:.78rem; color:#6B7280; }

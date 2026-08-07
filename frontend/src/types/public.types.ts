@@ -17,4 +17,5 @@ export interface PublicDoctor {
   years_experience: number;
   consultation_fee: number;
   specialty: string;
+  photo_url: string | null;
 }

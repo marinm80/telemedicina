@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 final class AdminDoctorController extends Controller
@@ -27,6 +28,7 @@ final class AdminDoctorController extends Controller
                 'doctor_profiles.years_experience',
                 'doctor_profiles.university',
                 'doctor_profiles.license_number',
+                'doctor_profiles.photo_path',
                 'doctor_profiles.created_at',
                 'users.name',
                 'users.last_name',
@@ -39,6 +41,7 @@ final class AdminDoctorController extends Controller
 
         // Add specialties to each doctor
         $doctors = $doctors->map(function ($doc) use ($db) {
+            $doc->photo_url = $doc->photo_path ? Storage::disk('public')->url($doc->photo_path) : null;
             $doc->specialties = $db->table('doctor_specialties')
                 ->join('specialties', 'specialties.id', '=', 'doctor_specialties.specialty_id')
                 ->where('doctor_specialties.doctor_profile_id', $doc->profile_id)
@@ -70,6 +73,7 @@ final class AdminDoctorController extends Controller
             'specialty_ids'    => ['required', 'array', 'min:1'],
             'specialty_ids.*'  => ['uuid'],
             'status'           => ['nullable', 'in:pending,approved,rejected'],
+            'photo'            => ['nullable', 'image', 'max:4096'],
         ]);
 
         $db = DB::connection('pgsql_admin');
@@ -80,7 +84,13 @@ final class AdminDoctorController extends Controller
             return response()->json(['message' => 'Ya existe un usuario con ese correo electrónico.'], 422);
         }
 
-        $db->transaction(function () use ($db, $validated) {
+        // Se sube antes de la transacción: si la escritura a disco falla,
+        // no queremos abrir una transacción de DB para nada.
+        $photoPath = $request->hasFile('photo')
+            ? $request->file('photo')->store('doctor-photos', 'public')
+            : null;
+
+        $db->transaction(function () use ($db, $validated, $photoPath) {
             $userId = Str::uuid()->toString();
             $profileId = Str::uuid()->toString();
             $now = now();
@@ -116,6 +126,7 @@ final class AdminDoctorController extends Controller
                 'description'      => $validated['description'] ?? '',
                 'years_experience' => $validated['years_experience'] ?? 0,
                 'university'       => $validated['university'] ?? '',
+                'photo_path'       => $photoPath,
                 'created_at'       => $now,
                 'updated_at'       => $now,
             ]);
