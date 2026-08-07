@@ -18,7 +18,8 @@
     franja_fin: required, date, after:franja_inicio, exactamente 30 min
 -->
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SpinnerLoader from '@/components/ui/SpinnerLoader.vue';
 import ErrorFallback from '@/components/ui/ErrorFallback.vue';
@@ -68,9 +69,8 @@ async function fetchAvailability(doctorId: string, date: string) {
   slots.value = [];
 
   try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const res = await fetch(
-      `/api/availability?doctor_id=${doctorId}&date=${date}&timezone=${encodeURIComponent(tz)}`,
+      `/api/doctors/${doctorId}/availability?date=${date}`,
       {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin',
@@ -79,7 +79,7 @@ async function fetchAvailability(doctorId: string, date: string) {
 
     if (res.ok) {
       const json: AvailabilityResponse = await res.json();
-      slots.value = json.available_slots;
+      slots.value = json.slots;
       doctorTimezone.value = json.timezone;
       slotEstado.value = 'listo';
     } else if (res.status === 422) {
@@ -105,6 +105,15 @@ function selectDoctor(doctor: PublicDoctor) {
   currentStep.value = 2;
   fetchAvailability(doctor.id, selectedDate.value);
 }
+
+// Llegando desde "Ver Disponibilidad" de un médico puntual, `doctors`
+// trae exactamente 1 elemento — saltamos el paso 1 (que no tiene sentido
+// para elegir entre un solo médico) directo al calendario.
+onMounted(() => {
+  if (props.doctors.length === 1) {
+    selectDoctor(props.doctors[0]);
+  }
+});
 
 function onDateChange() {
   if (selectedDoctor.value && selectedDate.value) {
@@ -132,16 +141,18 @@ function goBack() {
 }
 
 // ── Step 3: Book Appointment ───────────────────────────────────────────
+const page = usePage();
+
 async function confirmBooking() {
   if (!selectedDoctor.value || !selectedSlot.value) return;
 
-  const payload = {
+  const validationPayload = {
     doctor_id: selectedDoctor.value.id,
     start_time: selectedSlot.value.start,
     end_time: selectedSlot.value.end,
   };
 
-  const errs = validateBooking(payload);
+  const errs = validateBooking(validationPayload);
   if (Object.keys(errs).length > 0) {
     bookingError.value = Object.values(errs).join(' ');
     return;
@@ -150,6 +161,11 @@ async function confirmBooking() {
   isBooking.value = true;
   bookingError.value = '';
 
+  // BookAppointmentRequest exige patient_id explícito (así valida que un
+  // paciente solo agende para sí mismo — agent/admin pueden agendar para
+  // cualquiera, pero este wizard todavía no tiene selector de paciente).
+  const patientId = (page.props as any)?.auth?.user?.id;
+
   try {
     const res = await fetch('/api/appointments', {
       method: 'POST',
@@ -157,10 +173,15 @@ async function confirmBooking() {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'X-XSRF-TOKEN': getCsrfToken(),
-        'Idempotency-Key': generateIdempotencyKey(),
+        'X-Idempotency-Key': generateIdempotencyKey(),
       },
       credentials: 'same-origin',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        patient_id: patientId,
+        doctor_id: selectedDoctor.value.id,
+        franja_inicio: selectedSlot.value.start,
+        franja_fin: selectedSlot.value.end,
+      }),
     });
 
     if (res.status === 201) {

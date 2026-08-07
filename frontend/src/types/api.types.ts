@@ -28,7 +28,7 @@ export interface AvailabilityResponse {
   doctor_id: string;
   date: string;           // formato YYYY-MM-DD
   timezone: string;       // zona IANA, ej: "America/Santiago"
-  available_slots: Slot[];
+  slots: Slot[];
 }
 
 // ── Appointments (RF-09 Reserva de Citas sin Solapamiento) ─────────────

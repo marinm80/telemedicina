@@ -21,13 +21,13 @@ function simulateLatency(): Promise<void> {
 
 /**
  * Mock de disponibilidad.
- * Fuente: GET /api/availability
+ * Fuente: GET /api/doctors/{id}/availability
  */
 export const mockAvailability: AvailabilityResponse = {
   doctor_id: '550e8400-e29b-41d4-a716-446655440000',
   date: '2026-08-03',
   timezone: 'America/Santiago',
-  available_slots: [
+  slots: [
     {
       start: '2026-08-03T10:00:00-03:00',
       end: '2026-08-03T10:30:00-03:00',
