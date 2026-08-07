@@ -42,6 +42,15 @@ const userRole = computed(() => (page.props as any)?.auth?.user?.role || 'patien
 const isDoctor = computed(() => userRole.value === 'doctor' || userRole.value === 'admin');
 const startingConsultation = ref<string | null>(null);
 
+// t('history.empty') está redactado para el paciente ("no has reservado");
+// para médico/admin/agente no tiene sentido ("reservar" es acción del
+// paciente) — cada rol ve su propia variante.
+const emptyStateMessage = computed(() => {
+  if (userRole.value === 'doctor') return 'Todavía no tienes citas asignadas en la plataforma.';
+  if (userRole.value === 'admin' || userRole.value === 'agent') return 'No hay citas registradas en la plataforma.';
+  return t('history.empty');
+});
+
 async function startConsultation(appt: typeof props.appointments[0]) {
   startingConsultation.value = appt.id;
   try {
@@ -410,7 +419,7 @@ async function downloadPdf(consultationId: string) {
 
     <!-- Estado: vacío -->
     <div v-if="props.appointments.length === 0" style="padding: 2rem; text-align: center; color: var(--color-text-muted);">
-      <p>{{ t('history.empty') }}</p>
+      <p>{{ emptyStateMessage }}</p>
     </div>
 
     <!-- Sin resultados en el filtro activo -->
