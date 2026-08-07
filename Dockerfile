@@ -47,6 +47,11 @@ WORKDIR /var/www/html
 
 COPY backend/ ./
 COPY --from=frontend-build /repo/backend/public/build ./public/build
+# LandingHero.vue referencia estas imágenes con ruta absoluta (/images/...),
+# que el navegador resuelve contra la raíz pública de Laravel — no contra
+# public/build/. Vite las necesita en frontend/public/ para resolver el
+# import en build time; acá las duplicamos donde Apache realmente las sirve.
+COPY --from=frontend-build /repo/backend/public/build/images ./public/images
 
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-progress \
     && cp .env.example .env \
