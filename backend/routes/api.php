@@ -12,6 +12,9 @@ use App\Http\Controllers\AppointmentController;
 use App\Http\Middleware\SetPostgresSessionContext;
 
 Route::middleware(['web', SetPostgresSessionContext::class])->group(function () {
+    // 0. Vitrina pública de médicos para la landing (sin sesión)
+    Route::get('/public/doctors', [\App\Http\Controllers\Clinical\DirectoryController::class, 'featured']);
+
     // 1. Endpoint de disponibilidad
     Route::get('/doctors/{id}/availability', [AppointmentController::class, 'availability']);
     Route::get('/doctors/{id}/month-availability', [AppointmentController::class, 'monthAvailability']);

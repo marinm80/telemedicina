@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Clinical;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -66,5 +67,38 @@ final class DirectoryController extends Controller
             'doctors'     => $doctors,
             'filters'     => $request->only(['specialty_id', 'search']),
         ]);
+    }
+
+    /**
+     * Vitrina pública de médicos para la landing (sin sesión). Misma fuente
+     * real (v_doctor_directory) que /directory — un médico nuevo aparece
+     * acá automáticamente, no hay una lista separada que mantener a mano.
+     */
+    public function featured(): JsonResponse
+    {
+        $doctors = DB::table('v_doctor_directory')
+            ->orderByDesc('years_experience')
+            ->limit(6)
+            ->get()
+            ->map(function ($doc) {
+                $specialty = DB::table('doctor_specialties')
+                    ->join('specialties', 'specialties.id', '=', 'doctor_specialties.specialty_id')
+                    ->where('doctor_specialties.doctor_profile_id', $doc->doctor_profile_id)
+                    ->orderBy('specialties.name')
+                    ->value('specialties.name');
+
+                return [
+                    'id'                => $doc->user_id,
+                    'name'              => $doc->name,
+                    'last_name'         => $doc->last_name,
+                    'description'       => $doc->description,
+                    'university'        => $doc->university,
+                    'years_experience'  => $doc->years_experience,
+                    'consultation_fee'  => (float) $doc->consultation_fee,
+                    'specialty'         => $specialty ?? 'Medicina General',
+                ];
+            });
+
+        return response()->json($doctors);
     }
 }

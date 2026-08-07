@@ -16,13 +16,15 @@ import LandingDoctors from '@/components/landing/LandingDoctors.vue';
 import LandingHowItWorks from '@/components/landing/LandingHowItWorks.vue';
 import LandingFooter from '@/components/landing/LandingFooter.vue';
 import { useAppState } from '@/composables/useAppState';
-import { mockPublicDoctors } from '@/lib/mockData';
 import type { PublicDoctor } from '@/types/public.types';
 
 const fetcher = async (signal: AbortSignal): Promise<PublicDoctor[]> => {
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  signal.throwIfAborted();
-  return [...mockPublicDoctors];
+  const res = await fetch('/api/public/doctors', {
+    headers: { 'Accept': 'application/json' },
+    signal,
+  });
+  if (!res.ok) throw new Error('No se pudo cargar el directorio de médicos.');
+  return res.json();
 };
 
 const { items: doctors, estado, error, estaVacio, cargar } = useAppState<PublicDoctor>(fetcher);
