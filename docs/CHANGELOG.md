@@ -5,6 +5,35 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 El formato está basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.0.0/),
 y este proyecto se adhiere a [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-07 - Diagnóstico general por rol: agendar cita, agenda y "Mis Citas"
+
+Tras un diagnóstico manual de las 4 vistas de rol (Paciente, Médico, Administrador, Agente) se encontraron y corrigieron 3 bugs funcionales reales. Cada uno en su propio commit.
+
+### Corregido
+
+- **Agendar cita (`/booking/{doctorProfileId}`) — roto en 5 puntos distintos de la misma cadena, todos previamente inalcanzables por un 500 inicial:**
+  - `BookingController::create()` inyectaba `App\Actions\Appointments\GetDoctorSlotsAction`, una clase que no existe → `ReflectionException` → 500 para cualquier rol (paciente, agente, admin). Ningún usuario podía agendar una cita desde la interfaz.
+  - El controller le pasaba props (`doctor`, `available_slots`, `selected_date`) que `BookingWizard.vue` ni declara — el componente espera un array `doctors: PublicDoctor[]` para su wizard de 3 pasos.
+  - `fetchAvailability()` llamaba a `/api/availability?doctor_id=...` (no existe); la ruta real es `GET /api/doctors/{id}/availability?date=...` (tal como ya documentaba `API_CONTRACTS.md`).
+  - Leía `json.available_slots`; el backend siempre devolvió `slots` — el tipo `AvailabilityResponse` tenía el campo mal nombrado desde su definición.
+  - `confirmBooking()` mandaba `doctor_id`/`start_time`/`end_time` sin `patient_id` (con el header `Idempotency-Key` en vez de `X-Idempotency-Key`) — `BookAppointmentRequest` exige `patient_id` explícito para que `AppointmentPolicy::create()` valide que un paciente solo agende para sí mismo, y el nombre exacto del header.
+  - Fix: `BookingController` ahora solo pasa el médico preseleccionado en la forma que `BookingWizard.vue` espera; el componente detecta un solo médico en la lista y salta el paso 1 automáticamente (`onMounted`). `apiClient.mock.ts` y el tipo `AvailabilityResponse` corregidos a juego.
+  - Verificado end-to-end: login paciente → selección de horario → confirmación → `201 Created`, cita real en la base de datos.
+
+- **Agenda del médico (`/agenda`) no mostraba horarios ni bloqueos:**
+  - `AgendaController::index()` seleccionaba `start_time`/`end_time` (derivados de `franja` con `lower()`/`upper()`), pero `AgendaManager.vue` lee `s.franja` directo tanto para el rango horario por día (`displayFranja`) como para calcular "Horas/semana" y "Slots/semana" (`parseFranja`) — con `franja` undefined, ambos fallaban en silencio: rango en blanco, `0h`, `0` slots pese a haber franjas reales configuradas.
+  - El controller mandaba la prop `schedule_blocks`; el componente declara `blocks`. Los bloqueos puntuales nunca llegaban en el render inicial (si se creaba uno en la misma sesión sí aparecía, porque ese flujo lo agrega al array local sin pasar por props — lo que ocultaba el bug en pruebas rápidas).
+  - Fix: seleccionar `franja::text as franja` en ambas consultas y renombrar la prop a `blocks`.
+  - Verificado: horas/slots por semana calculan correcto, y un bloqueo creado sobrevive un reload completo de la página.
+
+- **"Mis Citas" le mostraba al médico su propio nombre en vez del del paciente:**
+  - Cada tarjeta de cita usaba `appt.doctor_name` sin condición, sin importar quién la veía. Un médico mirando su propia lista de citas veía su propio nombre (y su propia especialidad) en cada tarjeta — imposible distinguir de qué paciente era cada cita. Mismo problema en el texto del modal de cancelación.
+  - Fix: usar el flag `isDoctor` ya existente (gobierna el botón "Atender" y el filtro de pacientes) para elegir `patient_name` cuando quien mira es médico/admin, `doctor_name` en caso contrario. Los pacientes ven exactamente el mismo dato que antes — la rama nueva solo aplica cuando `isDoctor` es verdadero.
+
+### Notas Técnicas
+- Los 5 sub-bugs de "agendar cita" compartían un patrón: cada capa (controller → componente → fetch → policy) estaba documentada correctamente en su propio comentario/`API_CONTRACTS.md`, pero implementada sin seguir esa documentación. Ningún fix requirió cambiar el contrato "oficial" — solo alinear la implementación con lo ya documentado.
+- Pendiente de este diagnóstico (no corregido todavía, reportado al usuario): enlace "Ver mis recetas" del dashboard de paciente con `href=""` (no navega a ningún lado); copy de estado vacío en "Mis Citas" ("Aún no has reservado...") pensado solo para pacientes, se muestra igual para médico/agente.
+
 ## [0.7.0] - 2026-08-06 - Flujo Referidos → Agendamiento
 
 ### Añadido
