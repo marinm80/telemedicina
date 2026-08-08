@@ -120,56 +120,43 @@ const getStatusLabel = (status: string) => {
               { key: 'actions', label: 'Acciones', align: 'right' as const }
             ]"
             :rows="recent_appointments"
+            empty-icon="pi-calendar-times"
+            empty-message="No hay citas recientes para mostrar."
           >
-            <template #header>
-              <tr>
-                <th>Paciente</th>
-                <th>Médico</th>
-                <th>Fecha y Hora</th>
-                <th>Estado</th>
-                <th class="text-right">Acciones</th>
-              </tr>
+            <template #cell-patient="{ row }">
+              <div class="patient-cell">
+                <div class="avatar">
+                  {{ row.patient_name.charAt(0) }}{{ row.patient_last_name.charAt(0) }}
+                </div>
+                <div class="patient-info">
+                  <span class="name">{{ row.patient_name }} {{ row.patient_last_name }}</span>
+                </div>
+              </div>
             </template>
-            
-            <template #row="{ row }">
-              <tr>
-                <td>
-                  <div class="patient-cell">
-                    <div class="avatar">
-                      {{ row.patient_name.charAt(0) }}{{ row.patient_last_name.charAt(0) }}
-                    </div>
-                    <div class="patient-info">
-                      <span class="name">{{ row.patient_name }} {{ row.patient_last_name }}</span>
-                    </div>
-                  </div>
-                </td>
-                <td>
-                  <span class="doctor-name">Dr(a). {{ row.doctor_name }} {{ row.doctor_last_name }}</span>
-                </td>
-                <td>
-                  <div class="date-cell">
-                    <i class="pi pi-calendar"></i>
-                    <span>{{ formatDateTime(row.franja_start) }}</span>
-                  </div>
-                </td>
-                <td>
-                  <span class="status-badge" :style="{ '--status-color': getStatusColor(row.status) }">
-                    <span class="status-dot"></span>
-                    {{ getStatusLabel(row.status) }}
-                  </span>
-                </td>
-                <td class="actions-cell">
-                  <Link :href="`/appointments/${row.id}`" class="btn-action">
-                    Ver detalle
-                  </Link>
-                </td>
-              </tr>
+
+            <template #cell-doctor="{ row }">
+              <span class="doctor-name">Dr(a). {{ row.doctor_name }} {{ row.doctor_last_name }}</span>
             </template>
-            
-            <template #empty>
-              <div class="empty-state">
-                <i class="pi pi-calendar-times"></i>
-                <p>No hay citas recientes para mostrar.</p>
+
+            <template #cell-fecha="{ row }">
+              <div class="date-cell">
+                <i class="pi pi-calendar"></i>
+                <span>{{ formatDateTime(row.franja_start) }}</span>
+              </div>
+            </template>
+
+            <template #cell-status="{ row }">
+              <span class="status-badge" :style="{ '--status-color': getStatusColor(row.status) }">
+                <span class="status-dot"></span>
+                {{ getStatusLabel(row.status) }}
+              </span>
+            </template>
+
+            <template #cell-actions="{ row }">
+              <div class="actions-cell">
+                <Link :href="`/appointments/${row.id}`" class="btn-action">
+                  Ver detalle
+                </Link>
               </div>
             </template>
           </DataTable>
