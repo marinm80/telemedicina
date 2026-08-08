@@ -1222,3 +1222,13 @@ GRANT SELECT, INSERT, UPDATE ON prescriptions TO app_runtime;
 ### Notas sobre IDs de referrals
 - `consultation_id`: consulta del médico que REFIERE (origen, médico general)
 - `appointment_id`: cita que el paciente AGENDÓ con el especialista (destino)
+
+## Columna: doctor_profiles.photo_path (v0.8.0)
+
+```sql
+ALTER TABLE doctor_profiles ADD COLUMN photo_path varchar(255) NULL;
+```
+
+Ruta relativa dentro del disco público de Laravel (`storage/app/public/doctor-photos/...`), resuelta a URL absoluta vía `Storage::disk('public')->url()`. `NULL` cuando el médico no tiene foto subida — el frontend cae a un avatar de iniciales en ese caso, nunca a una foto hardcodeada.
+
+**Vista `v_doctor_directory` actualizada** para incluir `dp.photo_path` en el `SELECT` (antes no la exponía). Sin esta columna en la vista, el landing público y el directorio no podían mostrar la foto sin pasar por `pgsql_admin`.

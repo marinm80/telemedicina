@@ -6,7 +6,7 @@
   RF-24 Asistente Clínico (Dashboard)
   Endpoint: POST /api/assistant/clinical
   
-  REGLA UI_PROTOTYPE.md §8.2:
+  REGLA UI_PROTOTYPE.md §8.3:
   "El Asistente Clínico de la IA NUNCA debe superponerse al chat médico.
   Durante consultas activas, la UI debe interceptar el código HTTP 409
   ASSISTANT_DISABLED_DURING_CONSULTATION y ocultar el panel del asistente."

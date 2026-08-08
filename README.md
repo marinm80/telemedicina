@@ -74,5 +74,6 @@ La interfaz utiliza el design system **"Salvia"** — una paleta médica profesi
 | [`docs/UI_COMPONENTS.md`](docs/UI_COMPONENTS.md) | Catálogo de componentes Salvia (props, slots, tokens) |
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | Log de cambios (Keep a Changelog) |
 | [`docs/DECISIONES_ALCANCE.md`](docs/DECISIONES_ALCANCE.md) | Alcance y trade-offs |
-| [`docs/walkthrough.md`](docs/walkthrough.md) | Resumen de entregas implementadas |
+| [`docs/INFORME_PROYECTO_SALVIA.md`](docs/INFORME_PROYECTO_SALVIA.md) | Informe técnico completo — arquitectura, stack, estructura |
+| [`docs/BRIEF_REFERIDOS_AUTOAGENDAR.md`](docs/BRIEF_REFERIDOS_AUTOAGENDAR.md) | Diseño del sistema de referidos (implementado) |
 

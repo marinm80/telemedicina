@@ -43,3 +43,10 @@ Thumbs.db
 # y documentado en UI_COMPONENTS.md/UI_PROTOTYPE.md, no hace falta versionarlo.
 /docs/diseno_*/
 /docs/*.zip
+
+# Framework propio de trabajo con agentes IA, reutilizado en todos los
+# proyectos del autor (ver agent/PROTOCOLO.md) — sigue siendo la autoridad
+# de proceso que PRD.md §11 referencia, así que se mantiene en disco, pero
+# es meta-tooling del autor, no código ni contenido de este proyecto: no
+# pertenece a un repo público de portafolio.
+/agent/

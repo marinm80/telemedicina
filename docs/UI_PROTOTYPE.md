@@ -1,6 +1,6 @@
-# Prototipo y Wireframes de UI/UX (Gate 2A)
+# Prototipo y Wireframes de UI/UX
 
-> **Estado:** Propuesta de Diseño de Interfaz para Aprobación
+> **Estado:** Implementado. Las secciones 1-8 describen el diseño tal como se aprobó y en general coinciden con el código actual — ver §9 para las diferencias encontradas al auditar contra la implementación real.
 > **Perfil de Marca:** PORTAFOLIO (Cintillo visible y firma de créditos)
 > **UI Components:** PrimeVue
 
@@ -252,3 +252,20 @@ Para resolver de manera definitiva la ambigüedad visual y arquitectónica entre
 
 4. **Separación Temporal (Asistente Antes, Médico Durante):**
    La utilidad del asistente se enmarca en la ventana previa a la cita: guiar al paciente en la recolección de motivos y antecedentes para el **RF-13 (Cuestionario Pre-consulta)** y el refresco de la ficha longitudinal. Al momento de abrirse la consulta en vivo (`status = 'in_progress'`), la IA se apaga por completo, garantizando que el canal sea 100% humano con el profesional de la salud.
+
+   > Nota (auditoría posterior): `Clinical/PreConsultation.vue` quedó huérfano — ninguna ruta lo renderiza — y se eliminó del repositorio. El objetivo de "RF-13" descrito arriba sigue siendo válido como intención de diseño; la pantalla dedicada específicamente no llegó a conectarse.
+
+---
+
+## 9. Auditoría de los 4 Dashboards contra este documento
+
+Los 4 dashboards por rol (`Pages/Dashboard/*.vue`) fueron revisados contra §1-§2 de este documento. Coinciden en estructura general (header + StatCards + tabla/gráfico + sidebar), pero se encontraron los siguientes puntos de deriva — cosas que se agregaron o cambiaron después de este prototipo y que vale la pena que quien lea el código sepa de antemano:
+
+| Dashboard | Deriva encontrada |
+|---|---|
+| `AdminDashboard.vue` | Incluye una tabla de citas paginada y con buscador (`router.get('/admin', {search, status_filter, page})`) — no descrita en el prototipo original, agregada como funcionalidad real posterior. |
+| `DoctorDashboard.vue` | El KPI de ingresos usa `formatUSD()` (`@/lib/currency`) — helper de moneda único, no existía en el prototipo original. `pending_tasks` cae a texto hardcodeado ("Completar nota clínica" / "Paciente de las 10:00") cuando el backend no manda `title`/`description` — parece un placeholder de una función de tareas no completamente conectada a datos reales todavía. |
+| `PatientDashboard.vue` | La tarjeta "Cobertura" (`80 %`, "Copago 9 US$ por consulta") es **texto estático**, no viene de ningún prop — no confundir con un dato real del paciente. El botón "Ir a sala de espera" del `AlertCard` de cita-hoy usa `actionHref="#"` — enlace sin destino real todavía. |
+| `AgentDashboard.vue` | Prop `unassigned_requests_count` se recibe del backend pero nunca se renderiza en el template — código muerto, probablemente de un widget planeado y no construido. La acción "Registrar paciente" del `AssistantWidget` apunta a `/patients/create`, ruta que **no existe** en `web.php` — enlace especulativo, confirmado con un comentario en el propio código (`// Assuming this route exists`). La tabla de citas recientes usaba slots `#header`/`#row`/`#empty` que `DataTable.vue` no reconoce (solo soporta `cell-{key}`) — las filas quedaban en blanco sin ningún error visible; corregido en esta misma auditoría. |
+
+Ninguno de estos puntos es una regresión del prototipo — son extensiones reales hechas durante el desarrollo que este documento no había capturado todavía.

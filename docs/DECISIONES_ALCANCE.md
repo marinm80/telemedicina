@@ -1,8 +1,8 @@
 # Decisiones de alcance — Telemedicina (Proyecto 11)
 
-> **Fecha:** 2026-07-29 · **Autor:** Rafael Marín
-> **Estado:** Aprobadas. Son la entrada para reescribir `docs/PRD.md` a la versión 2.0.
-> **El PRD v1.0 (2025-07-13) está desactualizado.** Donde este archivo y el PRD difieran, **manda este archivo**.
+> **Fecha de origen:** 2026-07-29 · **Autor:** Rafael Marín · **Última entrada:** 2026-08-03
+> **Estado:** Registro vivo de decisiones. Las secciones 1-6 fueron la entrada para reescribir `docs/PRD.md` a la versión 2.0 (ya incorporadas ahí); las secciones 7-13 son decisiones técnicas posteriores (agenda del médico, distinción de agentes/asistentes, deuda técnica) que no se migraron al PRD y viven solo aquí.
+> **Donde este archivo y el PRD difieran, manda este archivo** — es la fuente de más alta resolución temporal.
 
 ---
 

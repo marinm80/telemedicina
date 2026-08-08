@@ -1,7 +1,7 @@
 # Brief — Cerrar el flujo de Referidos → Agendamiento
 
-> **Estado**: decisiones cerradas (ver sección 7), sin implementar todavía.
-> **Por qué existe**: es el hueco más señalado en la revisión de portfolio — un paciente referido a un especialista hoy tiene que buscarlo manualmente, sin continuidad desde la consulta que generó el referido.
+> **Estado**: ✅ Implementado (`/paciente/referidos`, `Patient/MyReferrals.vue`) — ver `docs/CHANGELOG.md`. Queda como registro histórico de las decisiones de diseño.
+> **Limitación que sigue vigente**: el referido no auto-crea la cita con el especialista — el paciente ve el referido y agenda manualmente. El "hueco" original (sin continuidad visible desde la consulta) se cerró; el auto-agendamiento en sí no se construyó.
 
 ---
 

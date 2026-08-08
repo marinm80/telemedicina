@@ -1,7 +1,7 @@
-# Mapa Arquitectónico del Proyecto (Gate 1.5)
+# Mapa Arquitectónico del Proyecto
 
-> **Estado:** Propuesta de Diseño para Aprobación
-> **Stack:** Laravel 11 + Vue 3 (Inertia) + Redis
+> **Estado:** Implementado y desplegado en producción (telemedicina.rafaelmarin.dev)
+> **Stack:** Laravel 12 + Vue 3 (Inertia) + PostgreSQL 17 + Redis
 > **Arquitectura:** Feature-First / Action-Driven
 
 ---

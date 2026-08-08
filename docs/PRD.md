@@ -600,7 +600,7 @@ Escenario: Bloqueo de mutación en tabla de logs de auditoría
 | **Cintillo / Footer** | Cintillo superior visible en la demo del frontend indicando el estado de demostración, y enlace a créditos en el pie de página. |
 
 **Políticas de desarrollo:**
-Este repositorio se adhiere rígidamente a lo establecido en `PROTOCOLO.md` y `EJEMPLARES.md` ubicados en la raíz. La lógica de negocio se implementa únicamente en la carpeta `app/Actions/` con una sola clase y método `handle()` por caso de uso.
+El trabajo en este repositorio sigue el protocolo de proceso propio del autor (`agent/PROTOCOLO.md` y `agent/EJEMPLARES.md`) — framework reutilizado en todos sus proyectos de portafolio, mantenido fuera de este repo público (ver `.gitignore`) porque no es contenido específico de telemedicina. La lógica de negocio se implementa únicamente en la carpeta `app/Actions/` con una sola clase y método `handle()` por caso de uso.
 
 ### 11.1 Jerarquía de autoridad
 

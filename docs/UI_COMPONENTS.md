@@ -346,6 +346,22 @@ Cabecera reutilizable para las páginas del dashboard.
 />
 ```
 
+### 3.7. AdminPanel (`Pages/Admin/AdminPanel.vue`, 552 líneas)
+**Descripción**: Página única de administración — reemplazó tres páginas separadas (`DoctorManager.vue`, `ScheduleManager.vue`, `SettingsManager.vue`, eliminadas del repo por quedar huérfanas). Ruta: `/admin/panel`. Tres tabs internos (`activeTab`: `doctors` | `users` | `config`), sin componentes hijos reutilizables — todo el markup vive en este archivo.
+
+**Tab "Médicos"**:
+- Filtro por estado (pills: Todos/Pendientes/Aprobados/Rechazados) con conteos en vivo.
+- Formulario de alta de médico (`FormData` multipart, no JSON — por el archivo): nombre, apellido, email, contraseña, licencia, universidad, años de experiencia, tarifa (USD), especialidades (multi-select pills), estado inicial, y **campo de foto de perfil** con vista previa (`URL.createObjectURL`) y envío como parte del mismo `FormData`.
+- Tarjetas de médico: foto (`photo_url`) o avatar de iniciales si no hay foto, especialidades, licencia, universidad, experiencia, badge de estado.
+- "Editar" abre un modal (`Teleport`) que actualiza estado + universidad + años + tarifa + descripción vía un solo `PATCH /api/admin/doctors/{id}/status`.
+- "Horarios" expande una grilla semanal (Lun–Dom) inline por médico, con alta/baja de franjas.
+
+**Tab "Usuarios"**: búsqueda + filtro por rol, tabla de usuarios con acción de cambio de contraseña vía modal (`PATCH /api/admin/users/{id}/password`).
+
+**Tab "Configuración"**: solo informativa — versión de stack, conteos en vivo, checklist de seguridad (RLS/CSRF/Bcrypt/GIST). Nada editable todavía.
+
+---
+
 ## 4. Árbol de Componentes Actualizado
 
 A continuación se ilustra la jerarquía y uso de los componentes en la estructura actual:
@@ -367,19 +383,23 @@ src/
 │       ├── AlertCard.vue
 │       ├── AssistantWidget.vue
 │       ├── BarChart.vue
-│       ├── DataTable.vue
+│       ├── DataTable.vue        (slots: solo cell-{columnKey} — no #header/#row/#empty)
 │       └── StatCard.vue
+│
+├── Pages/Admin/
+│   └── AdminPanel.vue           (único — ver §3.7. DoctorManager/ScheduleManager/SettingsManager
+│                                  eliminados, quedaron huérfanos tras este merge)
 ```
 
 ## 5. Roles y Navegación
 
-La plataforma provee experiencias adaptadas dependiendo del tipo de cuenta, expuestas en el `AppSidebar.vue`.
+La plataforma provee experiencias adaptadas dependiendo del tipo de cuenta, expuestas en el `AppSidebar.vue`. Los 4 roles reales son `admin`, `doctor`, `patient`, `agent` (columna `role` resuelta vía join a `roles`/`user_roles`, no un enum fijo).
 
-| Rol | Ícono | Items del Menú Principal |
-|-----|-------|--------------------------|
-| **Administrador** | 🛡 | Resumen, Verificaciones, Médicos, Pacientes, Facturación, Ajustes |
-| **Médico** | 🩺 | Hoy, Mi agenda, Pacientes, Notas clínicas, Recetas, Ingresos, Perfil público |
-| **Paciente** | 💚 | Inicio, Mis citas, Recetas, Resultados, Pagos, Perfil |
-| **Agente** | 🎧 | Recepción, Citas pendientes, Directorio, Pacientes |
+| Rol | Dashboard | Rutas propias principales |
+|-----|-----------|---------------------------|
+| **Administrador** | `AdminDashboard.vue` | `/admin/panel` (gestión unificada), `/admin` (tabla de citas paginada + buscador) |
+| **Médico** | `DoctorDashboard.vue` | `/agenda`, `/doctor/horarios`, `/doctor/consulta/{id}` |
+| **Paciente** | `PatientDashboard.vue` | `/paciente/directorio`, `/paciente/referidos`, `/booking/{doctorProfileId}` |
+| **Agente** | `AgentDashboard.vue` | Comparte `/appointments` y `/directory` con los demás roles; sin páginas exclusivas propias |
 
-*(Nota: En modo Administrador, existe un switcher para emular visualmente la interfaz de Médico y Paciente).*
+**Role switcher (solo admin)**: el botón "Ver como" en `AppSidebar.vue` muestra 4 opciones (Administrador/Médico/Paciente/Agente). Es **puramente cosmético** — cambia qué ítems de menú se muestran vía `provide('activeViewRole', ...)`, pero no cambia el rol real de la sesión ni vuelve a pedir datos al backend con otro rol. No confundir con impersonación real de rol.
