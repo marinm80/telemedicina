@@ -145,8 +145,15 @@ final class AdminDoctorController extends Controller
 
     public function updateStatus(Request $request, string $profileId): JsonResponse
     {
+        // El modal "Editar" de AdminPanel.vue reúne status + ficha (universidad,
+        // años, tarifa, descripción) en un solo guardado — este endpoint acepta
+        // ambos en la misma request en vez de forzar dos llamadas separadas.
         $validated = $request->validate([
-            'status' => ['required', 'in:approved,rejected,pending'],
+            'status'             => ['required', 'in:approved,rejected,pending'],
+            'university'         => ['nullable', 'string', 'max:255'],
+            'years_experience'   => ['nullable', 'integer', 'min:0'],
+            'consultation_fee'   => ['nullable', 'numeric', 'min:0'],
+            'description'        => ['nullable', 'string'],
         ]);
 
         $db = DB::connection('pgsql_admin');
@@ -156,13 +163,15 @@ final class AdminDoctorController extends Controller
             return response()->json(['message' => 'Perfil no encontrado.'], 404);
         }
 
-        $db->table('doctor_profiles')
-            ->where('id', $profileId)
-            ->update([
-                'status'     => $validated['status'],
-                'updated_at' => now(),
-            ]);
+        $update = ['status' => $validated['status'], 'updated_at' => now()];
+        foreach (['university', 'years_experience', 'consultation_fee', 'description'] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $update[$field] = $validated[$field];
+            }
+        }
 
-        return response()->json(['message' => 'Estado actualizado.'], 200);
+        $db->table('doctor_profiles')->where('id', $profileId)->update($update);
+
+        return response()->json(['message' => 'Médico actualizado.'], 200);
     }
 }

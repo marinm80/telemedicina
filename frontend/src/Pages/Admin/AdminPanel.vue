@@ -141,7 +141,7 @@ function openEdit(doc: Doctor) { editDoc.value = doc; editForm.value = { status:
 async function saveEdit() {
   if (!editDoc.value) return; editSaving.value = true; error.value = '';
   try {
-    const res = await fetch(`/api/admin/doctors/${editDoc.value.profile_id}/status`, { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf() }, body: JSON.stringify({ status: editForm.value.status }) });
+    const res = await fetch(`/api/admin/doctors/${editDoc.value.profile_id}/status`, { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf() }, body: JSON.stringify(editForm.value) });
     if (res.ok) { successMsg.value = '✅ Médico actualizado'; editModal.value = false; await fetchDoctors(); setTimeout(() => successMsg.value = '', 4000); }
     else { const d = await res.json().catch(() => ({})); error.value = d.message || 'Error'; }
   } catch (e: any) { error.value = e.message; } finally { editSaving.value = false; }
