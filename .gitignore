@@ -29,6 +29,7 @@ Thumbs.db
 /frontend/dist/
 /frontend/.env.local
 /frontend/.env.*.local
+/frontend/.pnpm-store/
 
 # Temporal / scratch
 /scratch/
@@ -36,3 +37,9 @@ Thumbs.db
 # Contiene secretos reales de producción (APP_KEY, passwords de DB) —
 # nunca subir esto a un repo público.
 /docs/DEPLOY_COOLIFY.md
+
+# Mockups/referencias de diseño (capturas, exports .dc.html) — material de
+# trabajo, no código del proyecto; una vez implementado el componente real
+# y documentado en UI_COMPONENTS.md/UI_PROTOTYPE.md, no hace falta versionarlo.
+/docs/diseno_*/
+/docs/*.zip
